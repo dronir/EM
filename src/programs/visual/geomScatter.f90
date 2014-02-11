@@ -99,7 +99,7 @@ program geomScatter
   character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
 
   real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
-  integer :: n_datapoints, nSurfaceSamples, ipta, iptb
+  integer :: n_datapoints, nSurfaceSamples
 
   namelist /params/ &
        & resThetaE, gridResHorizontal, gridResVertical, &
@@ -187,8 +187,6 @@ program geomScatter
      call med_gridFit(M)
      call med_updateStatistics(M)
      do iField = 1, rf_nFieldsPerMed
-
-
         if(rf_applyFields) then
            !!- Smooth the medium surface
            !!
@@ -202,43 +200,37 @@ program geomScatter
               call med_maskHeight(m, real(rndField%field, fs))
            end if
         end if
-
-
         call cpu_time(sTime)
-
         ! START SIMULATING BASED ON BRDF TYPE
         select case(brdfType)
         case("shadowing")
-           call sampleGeometries(brdf_shadowing, nSamplesPerOrderTable(1), phase_function_constant, pfParamsTable, &
+           call sampleGeometries(brdf_shadowing, nSurfaceSamples, phase_function_constant, pfParamsTable, &
                                  iTheta, eTheta, ePhi, totalIntensity_t)
         case("Lambert")
-           call sampleGeometries(brdf_Lambert, nSamplesPerOrderTable(1), phase_function_constant, pfParamsTable, &
+           call sampleGeometries(brdf_Lambert, nSurfaceSamples, phase_function_constant, pfParamsTable, &
                                  iTheta, eTheta, ePhi, totalIntensity_t)
         case("LommelSeeliger")
            select case(brdfPhaseFunction)
            case("constant")
-              call sampleGeometries(brdf_LommelSeeliger, nSamplesPerOrderTable(1), phase_function_constant, &
+              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_constant, &
                                      pfParamsTable, iTheta, eTheta, ePhi, totalIntensity_t)
            case("HG1")
-              call sampleGeometries(brdf_LommelSeeliger, nSamplesPerOrderTable(1), phase_function_HG1, pfParamsTable, &
+              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG1, pfParamsTable, &
                                     iTheta, eTheta, ePhi, totalIntensity_t)
            case("HG2")
-              call sampleGeometries(brdf_LommelSeeliger, nSamplesPerOrderTable(1), phase_function_HG2, pfParamsTable, &
+              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG2, pfParamsTable, &
                                     iTheta, eTheta, ePhi, totalIntensity_t)
            end select
         case("RadTransfer")
-           call sampleGeometries(brdf_RadTrans, nSamplesPerOrderTable(1), phase_function_constant, pfParamsTable, &
+           call sampleGeometries(brdf_RadTrans, nSurfaceSamples, phase_function_constant, pfParamsTable, &
                                  iTheta, eTheta, ePhi, totalIntensity_t)
         case default
            call utl_fatal_error("Unsupported BRDF type.")
         end select
-
         call cpu_time(cTime)
-
         totalIntensity = totalIntensity + totalIntensity_t
     end do
   end do
-  write(*,*) "DEBUG START"
   write(*,'("Time taken: " ,(F8.3))') cTime - sTime
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -246,9 +238,7 @@ program geomScatter
   !! WRITE FILES AND CLEAN UP
   !!
   call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
-  write(*,*) "DEBUG MIDDLE"
   call med_mediumFileClose(Mf)
-    write(*,*) "DEBUG END"
 
 contains
 
@@ -307,9 +297,9 @@ contains
        end if
 
        ! MAIN RAY LOOP
-       do i = 1, nSurfaceSamples
+       do iss = 1, nSurfaceSamples
 
-          pSurface(1:2) = samples(:,i)
+          pSurface(1:2) = samples(:,iss)
 
           pFound = .false.
           do while (.not. pFound)
@@ -402,19 +392,16 @@ contains
 
     integer            :: fileID, dimSamples, dimDatapoints, nIllID
     integer            :: status
-  write(*,'("DEBUG START")')
     status = nf90_create(fName, NF90_CLOBBER, fileID)
     status = nf90_def_dim(fileID, "n_samples", samples, dimSamples)
     status = nf90_def_dim(fileID, "n_datapoints", datapoints, dimDatapoints)
     status = nf90_put_att(fileID, NF90_GLOBAL, "n_samples", [samples])
     status = nf90_put_att(fileID, NF90_GLOBAL, "n_datapoints", [datapoints])
-  write(*,'("DEBUG MIDDLE")')
     status = nf90_def_var(fileID, 'n_illuminated', NF90_FLOAT, [dimDatapoints], nIllID)
 
     status = nf90_enddef(fileID)
     status = nf90_put_var(fileID, nIllID, nIll)
     status = nf90_close(fileID)
-  write(*,'("DEBUG END")')
   end subroutine save
 
 end program geomScatter
