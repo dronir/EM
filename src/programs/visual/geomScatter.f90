@@ -106,11 +106,11 @@ program geomScatter
         & outFilename, mediumFilename, photFilename, &
         & sDistribution, rho, rhoAllowedError, sampleSeed, &
         & nOrders, nSamplesPerOrder, &
-        & nPfParams, pfParams, &
+        & mu, w, nPfParams, pfParams, &
         & brdfType, brdfPhaseFunction, &
         & rf_applyFields, rf_nFieldsPerMed, rf_spectrumType, rf_P, rf_std, &
         & nThreads, &
-        & mediumMapRes, mediumDensitymapRes, full_output
+        & mediumMapRes, mediumDensitymapRes
 
     !! INITIALIZE SIMULATION PARAMETERS
     !!
@@ -134,18 +134,15 @@ program geomScatter
     end if
 
     !!- Initialize random number generator
-    !!
     call rnd_init(sampleSeed, nThreads, .true.)
 
 
     !! Read the number of samples for each scattering order into a table.
-    !!
     allocate(nSamplesPerOrderTable(nOrders))
     read(nSamplesPerOrder,*) nSamplesPerOrderTable
     nSurfaceSamples = nSamplesPerOrderTable(1)
 
     !! Select the media for the simulation from a file.
-    !!
     call med_mediumFileOpen(Mf, mediumFilename)
     call med_mediumFileSelectMedia(Mf)
 
@@ -162,12 +159,10 @@ program geomScatter
     end if
 
     !! READ PHOTOMETIC DATA
-    !!
     call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
     allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
 
     !! RUN SIMULATION
-    !!
     call utl_message("BRDF type used: " // brdfType)
     call utl_timer_init(timer, 5.0_fd, Mf%nSelectedMedia * rf_nFieldsPerMed * n_datapoints)
 
@@ -227,15 +222,14 @@ program geomScatter
     !! WRITE FILES AND CLEAN UP
     call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
     call med_mediumFileClose(Mf)
-
 contains
 
 
-  subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, totalIntensity_t)
+subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, totalIntensity_t)
     real(fd), external :: f
     real(fd), external :: Pf
-    real(fd)           :: Pp(10)
-    integer, intent(in)               :: nSurfaceSamples
+    real(fd) :: Pp(10)
+    integer, intent(in) :: nSurfaceSamples
     real(fd), dimension(:), intent(in):: iTheta, eTheta, ePhi
 
     real(fd), dimension(size(iTheta)), intent(out) :: totalIntensity_t
@@ -245,8 +239,8 @@ contains
     type(intersection_geometry) :: iSect
 
     real(fd), dimension(2,nSurfaceSamples) :: samples
-    real(fd), dimension(3)                 :: pSurface
-    real(fd)                               :: dz, L(3)
+    real(fd), dimension(3) :: pSurface
+    real(fd) :: dz, L(3)
 
     integer  :: nDatapoints, idp, iss
     logical  :: pFound, pLit
@@ -259,86 +253,64 @@ contains
     dz      = M%grid%height - M%hMean - TRACE_EPS
 
     do idp = 1, nDatapoints
-       !!--- Initialize the lightsource direction ---
-       !!
-       !!             |  A
-       !!             | /
-       !!             |/
-       !!       --------------
-       !!
-       L    = [sin(iTheta(idp)), 0.0_fd, cos(iTheta(idp))]
+        !! Initialize the lightsource direction
+        L    = [sin(iTheta(idp)), 0.0_fd, cos(iTheta(idp))]
 
-       !!--- Initialize the observer ray ---
-       !!
-       !!             |  /
-       !!             | /
-       !!             |v
-       !!       --------------
-       !!
-       call ray_init(rC, RAY_TYPE_CAMERA)
-       rC%D = [-cos(ePhi(idp))*sin(eTheta(idp)), -sin(ePhi(idp))*sin(eTheta(idp)), -cos(eTheta(idp))]
-       rC%rayID = rC%rayID + 100
+        !! Initialize the observer ray
+        call ray_init(rC, RAY_TYPE_CAMERA)
+        rC%D = [-cos(ePhi(idp))*sin(eTheta(idp)), -sin(ePhi(idp))*sin(eTheta(idp)), -cos(eTheta(idp))]
+        rC%rayID = rC%rayID + 100
 
-       if(rC%D(3) > -1e-2_fd) then
-          rC%D(3) = -1e-2
-          call vec_normalize(rC%D)
-       end if
+        ! Limit the z-component of the camera direction
+        if(rC%D(3) > -1e-2_fd) then
+           rC%D(3) = -1e-2
+           call vec_normalize(rC%D)
+        end if
 
-       ! MAIN RAY LOOP
-       do iss = 1, nSurfaceSamples
+        ! MAIN RAY LOOP
+        do iss = 1, nSurfaceSamples
+            pSurface(1:2) = samples(:,iss)
+            pFound = .false.
+            do while (.not. pFound)
+                if(rC%D(3) < 1e-2_fd) then
+                    rC%D(3) = 1e-2
+                    call vec_normalize(rC%D)
+                end if
 
-          pSurface(1:2) = samples(:,iss)
+                ! Compute the ray starting point
+                rC%P(1) = pSurface(1) + dz * (rC%D(1) / rC%D(3))
+                rC%P(2) = pSurface(2) + dz * (rC%D(2) / rC%D(3))
+                rC%P(3) = M%grid%height - TRACE_EPS
 
-          pFound = .false.
-          do while (.not. pFound)
-             if(rC%D(3) < 1e-2_fd) then
-                rC%D(3) = 1e-2
-                call vec_normalize(rC%D)
-             end if
+                rC%P(1) = modulo(rC%P(1) + M%hWidth, M%width) - M%hWidth
+                rC%P(2) = modulo(rC%P(2) + M%hWidth, M%width) - M%hWidth
 
-             rC % P(1)     = pSurface(1) + dz * (rC%D(1) / rC%D(3))
-             rC % P(2)     = pSurface(2) + dz * (rC%D(2) / rC%D(3))
-             rC % P(3)     = M%grid%height - TRACE_EPS
+                rC%rayID = rC%rayID + RAY_ID_INCR
 
-             rC % P(1)     = modulo(rC%P(1)+M%hWidth, M%width) - M%hWidth
-             rC % P(2)     = modulo(rC%P(2)+M%hWidth, M%width) - M%hWidth
+                !! Negate the ray.
+                rC%D = -rC%D
 
-             rC % rayID    = rC%rayID + RAY_ID_INCR
+                !! Find the true intersection point of the camera ray and medium.
+                pFound = trc_traceNearest(M%grid, rC, iSect)
 
-             !! Negate the ray.
-             !!
-             rC % D     = - rC%D
-
-             !! Find the true intersection point of the camera ray and medium.
-             !!
-             pFound        = trc_traceNearest(M%grid, rC, iSect)
-
-             !! If an intersection is found, check if the point is shadowed.
-             !!
-             if(pFound) then
-                   call trc_gatherRadiance(M%grid, rC%D, L, iSect%P1 + TRACE_EPS * iSect%N, &
-                        & iSect%N, 1.0_fd / real(nSamplesPerOrderTable(1), fd), &
-                        & nSamplesPerOrderTable, nOrders, 1, totalIntensity_t(idp), w, f, Pf, Pp)
-             else
-                call rnd_generate_uniform(0.0_fd, 1.0_fd, pSurface(1:2))
-                pSurface(1:2) = (pSurface(1:2) * M%width - M%hWidth) * 0.5_fd
-
-             end if
-
-          end do
-
-       end do
-       call utl_timerIncrease(timer)
+                !! If an intersection is found, compute the radiance
+                if(pFound) then
+                    call trc_gatherRadiance(M%grid, rC%D, L, iSect%P1+TRACE_EPS*iSect%N, &
+                           & iSect%N, 1.0_fd/real(nSurfaceSamples, fd), &
+                           & nSamplesPerOrderTable, nOrders, 1, totalIntensity_t(idp), w, f, Pf, Pp)
+                else
+                    ! Randomize a new location
+                    call rnd_generate_uniform(0.0_fd, 1.0_fd, pSurface(1:2))
+                    pSurface(1:2) = (pSurface(1:2) * M%width - M%hWidth) * 0.5_fd
+                end if
+            end do
+        end do
+        call utl_timerIncrease(timer)
     end do
-  end subroutine sampleGeometries
+end subroutine sampleGeometries
 
 
-
-
-
-
-
-  subroutine load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
+subroutine load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
     real(fd), dimension(:), allocatable, intent(out) :: intensity, iTheta, eTheta, ePhi
     integer :: n_datapoints
 
@@ -365,15 +337,14 @@ contains
     ncstatus = nf90_close(fileID)
 
     if (ncstatus /= 0) then
-       print *, 'Fatal error: could not read input file'
-       call exit()
+        print *, 'Fatal error: could not read input file'
+        call exit()
     end if
 
-  end subroutine load_datapoints
+end subroutine load_datapoints
 
 
-
-  subroutine save(fname, samples, datapoints, nIll)
+subroutine save(fname, samples, datapoints, nIll)
     character(len = *), intent(in) :: fName
     integer :: samples, datapoints
     real(fd), dimension(:) :: nIll
@@ -390,6 +361,7 @@ contains
     status = nf90_enddef(fileID)
     status = nf90_put_var(fileID, nIllID, nIll)
     status = nf90_close(fileID)
-  end subroutine save
+end subroutine save
 
 end program geomScatter
+
