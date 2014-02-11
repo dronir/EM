@@ -1,0 +1,27 @@
+&params
+  outFilename = "dscatter.scangles",
+  mediumFilename = "../medgen/medium_rho_035.nc",
+  photFilename = "../fit_2hg/nadir_noise.nc",
+
+  gridResHorizontal = 400,
+  gridResVertical = 10,
+
+  nOrders = 1,
+  nSamplesPerOrder = "5000",
+
+  rf_applyFields = .true.,
+  rf_nFieldsPerMed = 1,
+  rf_spectrumType = "fBm",
+  rf_P = 0.5,
+  rf_std = 0.02,
+
+  w                 = 0.1,
+  mu                = 1.0e2,
+
+  brdfType          = "LommelSeeliger"
+  brdfPhaseFunction = "HG2"
+  nPfParams         = 3
+  pfParams          = "0.88888888 0.6 -0.3"
+
+  nThreads = 1,
+/
