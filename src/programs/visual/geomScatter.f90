@@ -254,43 +254,39 @@ subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, to
 
     do idp = 1, nDatapoints
         !! Initialize the lightsource direction
-        L    = [sin(iTheta(idp)), 0.0_fd, cos(iTheta(idp))]
+        L = [sin(iTheta(idp)), 0.0_fd, cos(iTheta(idp))]
 
-        !! Initialize the observer ray
+        !! Initialize the observer ray (pointing at surface)
         call ray_init(rC, RAY_TYPE_CAMERA)
         rC%D = [-cos(ePhi(idp))*sin(eTheta(idp)), -sin(ePhi(idp))*sin(eTheta(idp)), -cos(eTheta(idp))]
         rC%rayID = rC%rayID + 100
 
         ! Limit the z-component of the camera direction
         if(rC%D(3) > -1e-2_fd) then
-           rC%D(3) = -1e-2
-           call vec_normalize(rC%D)
+            rC%D(3) = -1e-2
+            call vec_normalize(rC%D)
         end if
+        !rC%D = -rC%D
 
         ! MAIN RAY LOOP
         do iss = 1, nSurfaceSamples
             pSurface(1:2) = samples(:,iss)
             pFound = .false.
             do while (.not. pFound)
-                if(rC%D(3) < 1e-2_fd) then
-                    rC%D(3) = 1e-2
-                    call vec_normalize(rC%D)
-                end if
 
                 ! Compute the ray starting point
-                rC%P(1) = pSurface(1) + dz * (rC%D(1) / rC%D(3))
-                rC%P(2) = pSurface(2) + dz * (rC%D(2) / rC%D(3))
+                rC%P(1) = pSurface(1) - dz * (rC%D(1) / rC%D(3))
+                rC%P(2) = pSurface(2) - dz * (rC%D(2) / rC%D(3))
                 rC%P(3) = M%grid%height - TRACE_EPS
-
                 rC%P(1) = modulo(rC%P(1) + M%hWidth, M%width) - M%hWidth
                 rC%P(2) = modulo(rC%P(2) + M%hWidth, M%width) - M%hWidth
 
                 rC%rayID = rC%rayID + RAY_ID_INCR
 
-                !! Negate the ray.
-                rC%D = -rC%D
+                !! Negate the ray to point at the surface
 
-                !! Find the true intersection point of the camera ray and medium.
+                ! Find the true intersection point of the camera ray and medium.
+                !! This call needs the ray to point at the surface
                 pFound = trc_traceNearest(M%grid, rC, iSect)
 
                 !! If an intersection is found, compute the radiance
