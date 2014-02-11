@@ -94,6 +94,8 @@ program geomScatter
   real    :: sTime, cTime, eTime
   integer :: i, iField
 
+   real(fd), external, pointer    :: Pf
+
   character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
 
   real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
@@ -122,7 +124,7 @@ program geomScatter
      call get_command_argument(1, parFilename)
      write(*,'(("Using parameter file "),(A))') parFilename
   else
-     write(*,'("Usage: fit_2hg paramFile")')
+     write(*,'("Usage: geomScatter paramFile")')
      stop
   end if
 
@@ -166,13 +168,10 @@ program geomScatter
   !!
   !! READ PHOTOMETIC DATA
   !!
-  write(*,'("DEBUG START")')
   call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
   allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
 
 
-  mu = -1.
-   write(*,'("DEBUG MIDDLE")')
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
@@ -182,13 +181,13 @@ program geomScatter
   call utl_message("BRDF type used: " // brdfType)
   call utl_timer_init(timer, 5.0_fd, Mf%nSelectedMedia * rf_nFieldsPerMed * n_datapoints)
 
-   write(*,'("DEBUG END")')
-  do i = 1, MF%nSelectedMedia
+  do i = 1, Mf%nSelectedMedia
+     call med_mediumFileRead(M, Mf, Mf%varSelection(i))
+     call med_gridAssign(M, gridResHorizontal, gridResVertical)
+     call med_gridFit(M)
+     call med_updateStatistics(M)
      do iField = 1, rf_nFieldsPerMed
-        call med_mediumFileRead(M, Mf, Mf%varSelection(i))
-        call med_gridAssign(M, gridResHorizontal, gridResVertical)
-        call med_gridFit(M)
-        call med_updateStatistics(M)
+
 
         if(rf_applyFields) then
            !!- Smooth the medium surface
@@ -207,6 +206,7 @@ program geomScatter
 
         call cpu_time(sTime)
 
+        ! START SIMULATING BASED ON BRDF TYPE
         select case(brdfType)
         case("shadowing")
            call sampleGeometries(brdf_shadowing, nSamplesPerOrderTable(1), phase_function_constant, pfParamsTable, &
@@ -235,11 +235,10 @@ program geomScatter
 
         call cpu_time(cTime)
 
-!        ipta = (iField-1)*nSurfaceSamples + 1
-!        iptb = (iField)*nSurfaceSamples + 1
         totalIntensity = totalIntensity + totalIntensity_t
-     end do
+    end do
   end do
+  write(*,*) "DEBUG START"
   write(*,'("Time taken: " ,(F8.3))') cTime - sTime
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -247,8 +246,9 @@ program geomScatter
   !! WRITE FILES AND CLEAN UP
   !!
   call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
+  write(*,*) "DEBUG MIDDLE"
   call med_mediumFileClose(Mf)
-
+    write(*,*) "DEBUG END"
 
 contains
 
@@ -268,7 +268,7 @@ contains
 
     real(fd), dimension(2,nSurfaceSamples) :: samples
     real(fd), dimension(3)                 :: pSurface
-    real(fd)                               :: dz, tmu0, L(3)
+    real(fd)                               :: dz, L(3)
 
     integer  :: nDatapoints, idp, iss
     logical  :: pFound, pLit
@@ -402,17 +402,19 @@ contains
 
     integer            :: fileID, dimSamples, dimDatapoints, nIllID
     integer            :: status
-
+  write(*,'("DEBUG START")')
     status = nf90_create(fName, NF90_CLOBBER, fileID)
     status = nf90_def_dim(fileID, "n_samples", samples, dimSamples)
     status = nf90_def_dim(fileID, "n_datapoints", datapoints, dimDatapoints)
     status = nf90_put_att(fileID, NF90_GLOBAL, "n_samples", [samples])
     status = nf90_put_att(fileID, NF90_GLOBAL, "n_datapoints", [datapoints])
+  write(*,'("DEBUG MIDDLE")')
     status = nf90_def_var(fileID, 'n_illuminated', NF90_FLOAT, [dimDatapoints], nIllID)
 
     status = nf90_enddef(fileID)
     status = nf90_put_var(fileID, nIllID, nIll)
     status = nf90_close(fileID)
+  write(*,'("DEBUG END")')
   end subroutine save
 
 end program geomScatter
