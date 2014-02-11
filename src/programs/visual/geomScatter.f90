@@ -97,8 +97,6 @@ program geomScatter
   character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
 
   real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
-!  real(fd), dimension(:,:), allocatable :: mu, mut, mu0, mu0t, cosa, cosat
-  integer, dimension(:), allocatable :: nIlluminated, nIlluminatedt
   integer :: n_datapoints, nSurfaceSamples, ipta, iptb
 
   namelist /params/ &
@@ -168,12 +166,13 @@ program geomScatter
   !!
   !! READ PHOTOMETIC DATA
   !!
+  write(*,'("DEBUG START")')
   call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
   allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
 
 
-  nIlluminated = 0
   mu = -1.
+   write(*,'("DEBUG MIDDLE")')
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!
@@ -183,6 +182,7 @@ program geomScatter
   call utl_message("BRDF type used: " // brdfType)
   call utl_timer_init(timer, 5.0_fd, Mf%nSelectedMedia * rf_nFieldsPerMed * n_datapoints)
 
+   write(*,'("DEBUG END")')
   do i = 1, MF%nSelectedMedia
      do iField = 1, rf_nFieldsPerMed
         call med_mediumFileRead(M, Mf, Mf%varSelection(i))
