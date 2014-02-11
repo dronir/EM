@@ -29,216 +29,204 @@
 !! \date 12.2.2013
 
 program geomScatter
-  use iso_c_binding
-  use netcdf
-  use base
-  use util
-  use geometry
-  use particle
-  use hemisphere
-  use container_grid3d
-  use random
-  use medium
-  use trace
-  use sampler
-  use rfield
-  use brdf
+    use iso_c_binding
+    use netcdf
+    use base
+    use util
+    use geometry
+    use particle
+    use hemisphere
+    use container_grid3d
+    use random
+    use medium
+    use trace
+    use sampler
+    use rfield
+    use brdf
 
-  implicit none
+    implicit none
 
-  character (len=FNAME_LENGTH) :: parFilename        = ""
-  character (len=FNAME_LENGTH) :: outFilename        = "dscatter.scangles"
-  character (len=FNAME_LENGTH) :: mediumFileName     = "medium.nc"
-  character (len=100)          :: sDistribution      = "constant"
-  character (len=100)          :: brdfType           = "shadowing"
-  character (len=100)          :: brdfPhaseFunction  = "constant"
+    character (len=FNAME_LENGTH) :: parFilename        = ""
+    character (len=FNAME_LENGTH) :: outFilename        = "dscatter.scangles"
+    character (len=FNAME_LENGTH) :: mediumFileName     = "medium.nc"
+    character (len=100)          :: sDistribution      = "constant"
+    character (len=100)          :: brdfType           = "shadowing"
+    character (len=100)          :: brdfPhaseFunction  = "constant"
 
-  integer                      :: gridResHorizontal  = 200
-  integer                      :: gridResVertical    = 10
+    integer                      :: gridResHorizontal  = 200
+    integer                      :: gridResVertical    = 10
 
-  real(fd)                     :: rho                = 0.50_fd
-  real(fd)                     :: rhoAllowedError    = 0.05_fd
+    real(fd)                     :: rho                = 0.50_fd
+    real(fd)                     :: rhoAllowedError    = 0.05_fd
 
-  integer                      :: resThetaE          = 45
-  integer                      :: sampleSeed         = 0
+    integer                      :: resThetaE          = 45
+    integer                      :: sampleSeed         = 0
 
-  real(fd)                     :: mu                 = 1.0
-  real(fd)                     :: w                  = 0.1
+    real(fd)                     :: mu                 = 1.0
+    real(fd)                     :: w                  = 0.1
 
-  integer                      :: nOrders            = 1
-  character(len=100)           :: nSamplesPerOrder   = "1"
-  integer, allocatable         :: nSamplesPerOrderTable(:)
+    integer                      :: nOrders            = 1
+    character(len=100)           :: nSamplesPerOrder   = "1"
+    integer, allocatable         :: nSamplesPerOrderTable(:)
 
-  integer                      :: nPfParams          = 1
-  character (len=10000)        :: pfParams           = "0.0"
-  real(fd)                     :: pfParamsTable(10)
+    integer                      :: nPfParams          = 1
+    character (len=10000)        :: pfParams           = "0.0"
+    real(fd)                     :: pfParamsTable(10)
 
-  logical                      :: full_output       = .true.
+    logical                      :: full_output       = .true.
 
-  logical                      :: rf_applyFields    = .false.
-  integer                      :: rf_nFieldsPerMed  = 1
-  character(len=100)           :: rf_spectrumType   = "Gaussian"
-  real(fd)                     :: rf_P              = 0.5_fd
-  real(fd)                     :: rf_std            = 1.0_fd
+    logical                      :: rf_applyFields    = .false.
+    integer                      :: rf_nFieldsPerMed  = 1
+    character(len=100)           :: rf_spectrumType   = "Gaussian"
+    real(fd)                     :: rf_P              = 0.5_fd
+    real(fd)                     :: rf_std            = 1.0_fd
 
-  integer                      :: mediumMapRes        = 256
-  integer                      :: mediumDensitymapRes = 300
+    integer                      :: mediumMapRes        = 256
+    integer                      :: mediumDensitymapRes = 300
 
-  integer                      :: nThreads            = 1
+    integer                      :: nThreads            = 1
 
-  type(med_medium)      :: M
-  type(med_mediumFile)  :: Mf
-  type(rf_randomField)  :: rndField
-  type(utl_timer)       :: timer
+    type(med_medium)      :: M
+    type(med_mediumFile)  :: Mf
+    type(rf_randomField)  :: rndField
+    type(utl_timer)       :: timer
 
-  real    :: sTime, cTime, eTime
-  integer :: i, iField
+    real    :: sTime, cTime, eTime
+    integer :: i, iField
 
-   real(fd), external, pointer    :: Pf
+     real(fd), external, pointer    :: Pf
 
-  character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
+    character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
 
-  real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
-  integer :: n_datapoints, nSurfaceSamples
+    real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
+    integer :: n_datapoints, nSurfaceSamples
 
-  namelist /params/ &
-       & resThetaE, gridResHorizontal, gridResVertical, &
-       & outFilename, mediumFilename, photFilename, &
-       & sDistribution, rho, rhoAllowedError, sampleSeed, &
-       & nOrders, nSamplesPerOrder, &
-       & nPfParams, pfParams, &
-       & brdfType, brdfPhaseFunction, &
-       & rf_applyFields, rf_nFieldsPerMed, rf_spectrumType, rf_P, rf_std, &
-       & nThreads, &
-       & mediumMapRes, mediumDensitymapRes, full_output
+    namelist /params/ &
+        & resThetaE, gridResHorizontal, gridResVertical, &
+        & outFilename, mediumFilename, photFilename, &
+        & sDistribution, rho, rhoAllowedError, sampleSeed, &
+        & nOrders, nSamplesPerOrder, &
+        & nPfParams, pfParams, &
+        & brdfType, brdfPhaseFunction, &
+        & rf_applyFields, rf_nFieldsPerMed, rf_spectrumType, rf_P, rf_std, &
+        & nThreads, &
+        & mediumMapRes, mediumDensitymapRes, full_output
 
+    !! INITIALIZE SIMULATION PARAMETERS
+    !!
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!
-  !! INITIALIZE SIMULATION PARAMETERS
-  !!
+    if(command_argument_count() == 0) then
+        write(*,'("No parameter file given, using default values.")')
+    else if(command_argument_count() == 1) then
+        call get_command_argument(1, parFilename)
+        write(*,'(("Using parameter file "),(A))') parFilename
+    else
+        write(*,'("Usage: geomScatter paramFile")')
+        stop
+    end if
 
-  if(command_argument_count() == 0) then
-     write(*,'("No parameter file given, using default values.")')
-  else if(command_argument_count() == 1) then
-     call get_command_argument(1, parFilename)
-     write(*,'(("Using parameter file "),(A))') parFilename
-  else
-     write(*,'("Usage: geomScatter paramFile")')
-     stop
-  end if
+    !! Read the namelist from the parameter file.
+    !!
+    if(parFilename /= "") then
+        open(1,file=parFilename,status="old", form="formatted")
+        read(1,NML=params)
+        close(1)
+    end if
 
-  !! Read the namelist from the parameter file.
-  !!
-  if(parFilename /= "") then
-     open(1,file=parFilename,status="old", form="formatted")
-     read(1,NML=params)
-     close(1)
-  end if
-
-  !!- Initialize random number generator
-  !!
-  call rnd_init(sampleSeed, nThreads, .true.)
+    !!- Initialize random number generator
+    !!
+    call rnd_init(sampleSeed, nThreads, .true.)
 
 
-  !! Read the number of samples for each scattering order into a table.
-  !!
-  allocate(nSamplesPerOrderTable(nOrders))
-  read(nSamplesPerOrder,*) nSamplesPerOrderTable
-  nSurfaceSamples = nSamplesPerOrderTable(1)
+    !! Read the number of samples for each scattering order into a table.
+    !!
+    allocate(nSamplesPerOrderTable(nOrders))
+    read(nSamplesPerOrder,*) nSamplesPerOrderTable
+    nSurfaceSamples = nSamplesPerOrderTable(1)
 
-  !! Select the media for the simulation from a file.
-  !!
-  call med_mediumFileOpen(Mf, mediumFilename)
-  call med_mediumFileSelectMedia(Mf)
+    !! Select the media for the simulation from a file.
+    !!
+    call med_mediumFileOpen(Mf, mediumFilename)
+    call med_mediumFileSelectMedia(Mf)
 
-  if(rf_applyFields) then
-     call rf_init(rndField, 1000, 5.0_fd)
-     select case(rf_spectrumType)
-     case('Gaussian')
-        call rf_generateSpectrum (rndField, RF_SPECTRUM_GAUSSIAN, rf_P, rf_std)
-     case('fBm')
-        call rf_generateSpectrum (rndField, RF_SPECTRUM_FBM, rf_P, rf_std)
-     end select
-  else
-     rf_nFieldsPerMed = 1
-  end if
-
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!
-  !! READ PHOTOMETIC DATA
-  !!
-  call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
-  allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
-
-
-
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!
-  !! RUN SIMULATION
-  !!
-
-  call utl_message("BRDF type used: " // brdfType)
-  call utl_timer_init(timer, 5.0_fd, Mf%nSelectedMedia * rf_nFieldsPerMed * n_datapoints)
-
-  do i = 1, Mf%nSelectedMedia
-     call med_mediumFileRead(M, Mf, Mf%varSelection(i))
-     call med_gridAssign(M, gridResHorizontal, gridResVertical)
-     call med_gridFit(M)
-     call med_updateStatistics(M)
-     do iField = 1, rf_nFieldsPerMed
-        if(rf_applyFields) then
-           !!- Smooth the medium surface
-           !!
-           if(rf_spectrumType == 'constant') then
-              rndField%field = rf_P * M%height
-
-           !!- Apply macroscale surface roughness.
-           !!
-           else
-              call rf_generateField(rndField, iField)
-              call med_maskHeight(m, real(rndField%field, fs))
-           end if
-        end if
-        call cpu_time(sTime)
-        ! START SIMULATING BASED ON BRDF TYPE
-        select case(brdfType)
-        case("shadowing")
-           call sampleGeometries(brdf_shadowing, nSurfaceSamples, phase_function_constant, pfParamsTable, &
-                                 iTheta, eTheta, ePhi, totalIntensity_t)
-        case("Lambert")
-           call sampleGeometries(brdf_Lambert, nSurfaceSamples, phase_function_constant, pfParamsTable, &
-                                 iTheta, eTheta, ePhi, totalIntensity_t)
-        case("LommelSeeliger")
-           select case(brdfPhaseFunction)
-           case("constant")
-              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_constant, &
-                                     pfParamsTable, iTheta, eTheta, ePhi, totalIntensity_t)
-           case("HG1")
-              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG1, pfParamsTable, &
-                                    iTheta, eTheta, ePhi, totalIntensity_t)
-           case("HG2")
-              call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG2, pfParamsTable, &
-                                    iTheta, eTheta, ePhi, totalIntensity_t)
-           end select
-        case("RadTransfer")
-           call sampleGeometries(brdf_RadTrans, nSurfaceSamples, phase_function_constant, pfParamsTable, &
-                                 iTheta, eTheta, ePhi, totalIntensity_t)
-        case default
-           call utl_fatal_error("Unsupported BRDF type.")
+    if(rf_applyFields) then
+        call rf_init(rndField, 1000, 5.0_fd)
+        select case(rf_spectrumType)
+        case('Gaussian')
+            call rf_generateSpectrum (rndField, RF_SPECTRUM_GAUSSIAN, rf_P, rf_std)
+        case('fBm')
+            call rf_generateSpectrum (rndField, RF_SPECTRUM_FBM, rf_P, rf_std)
         end select
-        call cpu_time(cTime)
-        totalIntensity = totalIntensity + totalIntensity_t
-    end do
-  end do
-  write(*,'("Time taken: " ,(F8.3))') cTime - sTime
+    else
+        rf_nFieldsPerMed = 1
+    end if
 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!
-  !! WRITE FILES AND CLEAN UP
-  !!
-  call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
-  call med_mediumFileClose(Mf)
+    !! READ PHOTOMETIC DATA
+    !!
+    call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
+    allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
+
+    !! RUN SIMULATION
+    !!
+    call utl_message("BRDF type used: " // brdfType)
+    call utl_timer_init(timer, 5.0_fd, Mf%nSelectedMedia * rf_nFieldsPerMed * n_datapoints)
+
+    do i = 1, Mf%nSelectedMedia
+        call med_mediumFileRead(M, Mf, Mf%varSelection(i))
+        call med_gridAssign(M, gridResHorizontal, gridResVertical)
+        call med_gridFit(M)
+        call med_updateStatistics(M)
+        do iField = 1, rf_nFieldsPerMed
+            if(rf_applyFields) then
+                !!- Smooth the medium surface
+                !!
+                if(rf_spectrumType == 'constant') then
+                    rndField%field = rf_P * M%height
+                !!- Apply macroscale surface roughness.
+                else
+                    call rf_generateField(rndField, iField)
+                    call med_maskHeight(m, real(rndField%field, fs))
+               end if
+            end if
+            call cpu_time(sTime)
+            ! START SIMULATING BASED ON BRDF TYPE
+            select case(brdfType)
+            case("shadowing")
+                call sampleGeometries(brdf_shadowing, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                                     iTheta, eTheta, ePhi, totalIntensity_t)
+            case("Lambert")
+                call sampleGeometries(brdf_Lambert, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                                     iTheta, eTheta, ePhi, totalIntensity_t)
+            case("LommelSeeliger")
+                select case(brdfPhaseFunction)
+                case("constant")
+                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_constant, &
+                                          pfParamsTable, iTheta, eTheta, ePhi, totalIntensity_t)
+                case("HG1")
+                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG1, pfParamsTable, &
+                                         iTheta, eTheta, ePhi, totalIntensity_t)
+                case("HG2")
+                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG2, pfParamsTable, &
+                                         iTheta, eTheta, ePhi, totalIntensity_t)
+                end select
+            case("RadTransfer")
+                call sampleGeometries(brdf_RadTrans, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                                     iTheta, eTheta, ePhi, totalIntensity_t)
+            case default
+                call utl_fatal_error("Unsupported BRDF type.")
+            end select
+            call cpu_time(cTime)
+            totalIntensity = totalIntensity + totalIntensity_t
+        end do
+    end do
+    write(*,'("Time taken: " ,(F8.3))') cTime - sTime
+
+    ! Normalize by number of fields
+    totalIntensity = totalIntensity / (real(MF%nSelectedMedia,fd)*(real(rf_nFieldsPerMed,fd)))
+
+    !! WRITE FILES AND CLEAN UP
+    call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
+    call med_mediumFileClose(Mf)
 
 contains
 
