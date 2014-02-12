@@ -50,8 +50,6 @@ program geomScatter
     character (len=FNAME_LENGTH) :: outFilename        = "dscatter.scangles"
     character (len=FNAME_LENGTH) :: mediumFileName     = "medium.nc"
     character (len=100)          :: sDistribution      = "constant"
-    character (len=100)          :: brdfType           = "shadowing"
-    character (len=100)          :: brdfPhaseFunction  = "constant"
 
     integer                      :: gridResHorizontal  = 200
     integer                      :: gridResVertical    = 10
@@ -69,6 +67,8 @@ program geomScatter
     character(len=100)           :: nSamplesPerOrder   = "1"
     integer, allocatable         :: nSamplesPerOrderTable(:)
 
+    character (len=100)          :: brdfType           = "shadowing"
+    character (len=100)          :: brdfPhaseFunction  = "constant"
     integer                      :: nPfParams          = 1
     character (len=10000)        :: pfParams           = "0.0"
     real(fd)                     :: pfParamsTable(10)
@@ -94,12 +94,13 @@ program geomScatter
     real    :: sTime, cTime, eTime
     integer :: i, iField
 
-     real(fd), external, pointer    :: Pf
+    real(fd), external, pointer    :: Pf
 
     character (len=FNAME_LENGTH) :: photFilename = "photometry.nc"
 
-    real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, totalIntensity, totalIntensity_t, intensity
-    integer :: n_datapoints, nSurfaceSamples
+    real(fd), dimension(:), allocatable :: iTheta, eTheta, ePhi, intensity
+    real(fd), dimension(:,:), allocatable :: totalIntensity, totalIntensity_t
+    integer :: n_datapoints, nFirstOrderSamples
 
     namelist /params/ &
         & resThetaE, gridResHorizontal, gridResVertical, &
@@ -126,7 +127,6 @@ program geomScatter
     end if
 
     !! Read the namelist from the parameter file.
-    !!
     if(parFilename /= "") then
         open(1,file=parFilename,status="old", form="formatted")
         read(1,NML=params)
@@ -136,18 +136,22 @@ program geomScatter
     !!- Initialize random number generator
     call rnd_init(sampleSeed, nThreads, .true.)
 
+    !! Read the phase function parameters into a table.
+    read(PfParams,*) pfParamsTable(1:nPfParams)
 
     !! Read the number of samples for each scattering order into a table.
     allocate(nSamplesPerOrderTable(nOrders))
     read(nSamplesPerOrder,*) nSamplesPerOrderTable
-    nSurfaceSamples = nSamplesPerOrderTable(1)
+    nFirstOrderSamples = nSamplesPerOrderTable(1)
 
     !! Select the media for the simulation from a file.
+    write(*,'(("Using medium file "),(A))') mediumFilename
     call med_mediumFileOpen(Mf, mediumFilename)
     call med_mediumFileSelectMedia(Mf)
 
     if(rf_applyFields) then
-        call rf_init(rndField, 1000, 5.0_fd)
+        write(*,'(("Using medium file "),(A))') mediumFilename
+        call utl_message("Roughness spectrum type used: " // rf_spectrumType)
         select case(rf_spectrumType)
         case('Gaussian')
             call rf_generateSpectrum (rndField, RF_SPECTRUM_GAUSSIAN, rf_P, rf_std)
@@ -160,7 +164,7 @@ program geomScatter
 
     !! READ PHOTOMETIC DATA
     call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
-    allocate(totalIntensity(n_datapoints), totalIntensity_t(n_datapoints))
+    allocate(totalIntensity(n_datapoints,nOrders), totalIntensity_t(n_datapoints,nOrders))
 
     !! RUN SIMULATION
     call utl_message("BRDF type used: " // brdfType)
@@ -187,31 +191,37 @@ program geomScatter
             ! START SIMULATING BASED ON BRDF TYPE
             select case(brdfType)
             case("shadowing")
-                call sampleGeometries(brdf_shadowing, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                call sampleGeometries(brdf_shadowing, nFirstOrderSamples, phase_function_constant, pfParamsTable, &
                                      iTheta, eTheta, ePhi, totalIntensity_t)
             case("Lambert")
-                call sampleGeometries(brdf_Lambert, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                call sampleGeometries(brdf_Lambert, nFirstOrderSamples, phase_function_constant, pfParamsTable, &
                                      iTheta, eTheta, ePhi, totalIntensity_t)
             case("LommelSeeliger")
                 select case(brdfPhaseFunction)
                 case("constant")
-                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_constant, &
+                    call utl_message("Using constant phase function")
+                    call sampleGeometries(brdf_LommelSeeliger, nFirstOrderSamples, phase_function_constant, &
                                           pfParamsTable, iTheta, eTheta, ePhi, totalIntensity_t)
                 case("HG1")
-                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG1, pfParamsTable, &
+                    call utl_message("Using HG phase function")
+                    call sampleGeometries(brdf_LommelSeeliger, nFirstOrderSamples, phase_function_HG1, pfParamsTable, &
                                          iTheta, eTheta, ePhi, totalIntensity_t)
                 case("HG2")
-                    call sampleGeometries(brdf_LommelSeeliger, nSurfaceSamples, phase_function_HG2, pfParamsTable, &
+                    call utl_message("Using 2HG phase function")
+                    call sampleGeometries(brdf_LommelSeeliger, nFirstOrderSamples, phase_function_HG2, pfParamsTable, &
                                          iTheta, eTheta, ePhi, totalIntensity_t)
+                case default
+                    call utl_fatal_error("Unsupported phase function type.")
                 end select
             case("RadTransfer")
-                call sampleGeometries(brdf_RadTrans, nSurfaceSamples, phase_function_constant, pfParamsTable, &
+                call sampleGeometries(brdf_RadTrans, nFirstOrderSamples, phase_function_constant, pfParamsTable, &
                                      iTheta, eTheta, ePhi, totalIntensity_t)
             case default
                 call utl_fatal_error("Unsupported BRDF type.")
             end select
             call cpu_time(cTime)
             totalIntensity = totalIntensity + totalIntensity_t
+            totalIntensity_t = 0.0
         end do
     end do
     write(*,'("Time taken: " ,(F8.3))') cTime - sTime
@@ -220,34 +230,30 @@ program geomScatter
     totalIntensity = totalIntensity / (real(MF%nSelectedMedia,fd)*(real(rf_nFieldsPerMed,fd)))
 
     !! WRITE FILES AND CLEAN UP
-    call save(outFilename, nSurfaceSamples * rf_nFieldsPerMed, n_datapoints, totalIntensity)
+    call save(outFilename, nFirstOrderSamples * rf_nFieldsPerMed, n_datapoints, sum(totalIntensity,2))
     call med_mediumFileClose(Mf)
 contains
 
 
-subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, totalIntensity_t)
+subroutine sampleGeometries(f, nFirstOrderSamples, Pf, Pp, iTheta, eTheta, ePhi, totalIntensity_t)
     real(fd), external :: f
     real(fd), external :: Pf
     real(fd) :: Pp(10)
-    integer, intent(in) :: nSurfaceSamples
+    integer, intent(in) :: nFirstOrderSamples
     real(fd), dimension(:), intent(in):: iTheta, eTheta, ePhi
-
-    real(fd), dimension(size(iTheta)), intent(out) :: totalIntensity_t
-
+    real(fd), dimension(size(iTheta),nOrders), intent(out) :: totalIntensity_t
     type(ray) :: rC
     type(ray) :: rS
     type(intersection_geometry) :: iSect
-
-    real(fd), dimension(2,nSurfaceSamples) :: samples
+    real(fd), dimension(2,nFirstOrderSamples) :: samples
     real(fd), dimension(3) :: pSurface
     real(fd) :: dz, L(3)
-
     integer  :: nDatapoints, idp, iss
     logical  :: pFound, pLit
 
     nDatapoints = size(iTheta)
 
-    call smpl_griddedSamples2D(samples, nSurfaceSamples)
+    call smpl_griddedSamples2D(samples, nFirstOrderSamples)
 
     samples = (samples * M%width - M%hWidth) * 0.5_fd
     dz      = M%grid%height - M%hMean - TRACE_EPS
@@ -256,24 +262,21 @@ subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, to
         !! Initialize the lightsource direction
         L = [sin(iTheta(idp)), 0.0_fd, cos(iTheta(idp))]
 
-        !! Initialize the observer ray (pointing at surface)
+        !! Initialize the camera ray (pointing at surface)
         call ray_init(rC, RAY_TYPE_CAMERA)
         rC%D = [-cos(ePhi(idp))*sin(eTheta(idp)), -sin(ePhi(idp))*sin(eTheta(idp)), -cos(eTheta(idp))]
-        rC%rayID = rC%rayID + 100
 
-        ! Limit the z-component of the camera direction
+        ! Prevent the camera direction from being too close to horizontal.
         if(rC%D(3) > -1e-2_fd) then
             rC%D(3) = -1e-2
             call vec_normalize(rC%D)
         end if
-        !rC%D = -rC%D
 
         ! MAIN RAY LOOP
-        do iss = 1, nSurfaceSamples
+        do iss = 1, nFirstOrderSamples
             pSurface(1:2) = samples(:,iss)
             pFound = .false.
             do while (.not. pFound)
-
                 ! Compute the ray starting point
                 rC%P(1) = pSurface(1) - dz * (rC%D(1) / rC%D(3))
                 rC%P(2) = pSurface(2) - dz * (rC%D(2) / rC%D(3))
@@ -283,19 +286,17 @@ subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, to
 
                 rC%rayID = rC%rayID + RAY_ID_INCR
 
-                !! Negate the ray to point at the surface
-
                 ! Find the true intersection point of the camera ray and medium.
-                !! This call needs the ray to point at the surface
+                ! This call needs the ray to point at the surface
                 pFound = trc_traceNearest(M%grid, rC, iSect)
 
-                !! If an intersection is found, compute the radiance
+                ! If an intersection is found, compute the radiance,
+                ! else randomize a new surface location and try again.
                 if(pFound) then
                     call trc_gatherRadiance(M%grid, rC%D, L, iSect%P1+TRACE_EPS*iSect%N, &
-                           & iSect%N, 1.0_fd/real(nSurfaceSamples, fd), &
-                           & nSamplesPerOrderTable, nOrders, 1, totalIntensity_t(idp), w, f, Pf, Pp)
+                           & iSect%N, 1.0_fd/real(nFirstOrderSamples, fd), &
+                           & nSamplesPerOrderTable, nOrders, 1, totalIntensity_t(idp,:), w, f, Pf, Pp)
                 else
-                    ! Randomize a new location
                     call rnd_generate_uniform(0.0_fd, 1.0_fd, pSurface(1:2))
                     pSurface(1:2) = (pSurface(1:2) * M%width - M%hWidth) * 0.5_fd
                 end if
@@ -306,22 +307,25 @@ subroutine sampleGeometries(f, nSurfaceSamples, Pf, Pp, iTheta, eTheta, ePhi, to
 end subroutine sampleGeometries
 
 
+! This subroutine loads observational geometries from a NetCDF file.
 subroutine load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
     real(fd), dimension(:), allocatable, intent(out) :: intensity, iTheta, eTheta, ePhi
     integer :: n_datapoints
-
     character (len=FNAME_LENGTH) :: photFilename
-
     integer :: fileID, dimID, iThetaID, eThetaID, ePhiID, intensityID, ncstatus
 
+    ! Open NetCDF file and find out the number of data points
     ncstatus = nf90_open(photFilename, NF90_NOWRITE, fileID)
     ncstatus = nf90_inq_dimid(fileid, 'n_datapoints', dimID)
     ncstatus = nf90_inquire_dimension(fileid, dimid, len=n_datapoints)
 
+    ! Allocate tables based on number of data points
     allocate(intensity(n_datapoints), iTheta(n_datapoints), eTheta(n_datapoints), ePhi(n_datapoints))
     iTheta = 0.
-    iTheta = 0.
+    eTheta = 0.
+    ePhi = 0.
 
+    ! Load numbers from file to allocated tables
     ncstatus = nf90_inq_varid(fileid, 'intensity', intensityID)
     ncstatus = nf90_get_var(fileid, intensityID, intensity)
     ncstatus = nf90_inq_varid(fileid, 'i_theta', iThetaID)
@@ -332,28 +336,28 @@ subroutine load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFi
     ncstatus = nf90_get_var(fileid, ePhiID, ePhi)
     ncstatus = nf90_close(fileID)
 
+    ! Check for errors
     if (ncstatus /= 0) then
         print *, 'Fatal error: could not read input file'
         call exit()
     end if
-
 end subroutine load_datapoints
 
 
+! This subroutine saves the results of the computation.
 subroutine save(fname, samples, datapoints, nIll)
     character(len = *), intent(in) :: fName
     integer :: samples, datapoints
     real(fd), dimension(:) :: nIll
-
     integer            :: fileID, dimSamples, dimDatapoints, nIllID
     integer            :: status
-    status = nf90_create(fName, NF90_CLOBBER, fileID)
-    status = nf90_def_dim(fileID, "n_samples", samples, dimSamples)
-    status = nf90_def_dim(fileID, "n_datapoints", datapoints, dimDatapoints)
-    status = nf90_put_att(fileID, NF90_GLOBAL, "n_samples", [samples])
-    status = nf90_put_att(fileID, NF90_GLOBAL, "n_datapoints", [datapoints])
-    status = nf90_def_var(fileID, 'n_illuminated', NF90_FLOAT, [dimDatapoints], nIllID)
 
+    status = nf90_create(fName, NF90_CLOBBER, fileID)
+    status = nf90_def_dim(fileID, "n_rays", samples, dimSamples)
+    status = nf90_def_dim(fileID, "n_datapoints", datapoints, dimDatapoints)
+    status = nf90_put_att(fileID, NF90_GLOBAL, "n_rays", [samples])
+    status = nf90_put_att(fileID, NF90_GLOBAL, "n_datapoints", [datapoints])
+    status = nf90_def_var(fileID, 'intensity', NF90_FLOAT, [dimDatapoints], nIllID)
     status = nf90_enddef(fileID)
     status = nf90_put_var(fileID, nIllID, nIll)
     status = nf90_close(fileID)
