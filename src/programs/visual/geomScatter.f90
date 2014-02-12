@@ -165,6 +165,7 @@ program geomScatter
     !! READ PHOTOMETIC DATA
     call load_datapoints(intensity, iTheta, eTheta, ePhi, n_datapoints, photFilename)
     allocate(totalIntensity(n_datapoints,nOrders), totalIntensity_t(n_datapoints,nOrders))
+    totalIntensity = 0.0
 
     !! RUN SIMULATION
     call utl_message("BRDF type used: " // brdfType)
@@ -189,6 +190,7 @@ program geomScatter
             end if
             call cpu_time(sTime)
             ! START SIMULATING BASED ON BRDF TYPE
+            totalIntensity_t = 0.0
             select case(brdfType)
             case("shadowing")
                 call sampleGeometries(brdf_shadowing, nFirstOrderSamples, phase_function_constant, pfParamsTable, &
@@ -221,7 +223,6 @@ program geomScatter
             end select
             call cpu_time(cTime)
             totalIntensity = totalIntensity + totalIntensity_t
-            totalIntensity_t = 0.0
         end do
     end do
     write(*,'("Time taken: " ,(F8.3))') cTime - sTime
