@@ -328,9 +328,10 @@ contains
     end if
 
 
-  end subroutine trc_addDepthListElem
+end subroutine trc_addDepthListElem
 
-  subroutine trc_setFirstElem(e)
+
+subroutine trc_setFirstElem(e)
     type(trc_depthListElem), pointer :: e
 
     if(associated(e)) then 
@@ -364,8 +365,7 @@ contains
        nullify(e)
 
     end if
-
-  end subroutine trc_deleteElemTree
+end subroutine trc_deleteElemTree
 
 !!$
 !!$  SUBROUTINE trc_nextElem(e)
@@ -379,7 +379,7 @@ contains
 !!$ 
 !!$  END SUBROUTINE trc_nextElem
 
-  real(FD) function trc_traceDumb(c, r) result(I)
+real(FD) function trc_traceDumb(c, r) result(I)
     type(cnt_grid3d) :: c
     type(ray)        :: r
 
@@ -401,10 +401,10 @@ contains
        !I = 1.0 - SQRT(SUM((isect % P1 - r % P)**2)) / SQRT(2.0 * c%width**2) 
        I = dot_product(isect % N, -r%D)
     end if
+end function trc_traceDumb
 
-  end function trc_traceDumb
 
-  logical function trc_traceNearest(c, r, iSect) result(isFound)
+logical function trc_traceNearest(c, r, iSect) result(isFound)
     type(cnt_grid3d) :: c
     type(ray)        :: r
     type(intersection_geometry) :: iSect
@@ -450,9 +450,10 @@ contains
        end do
     end if
 
-  end function trc_traceNearest
+end function trc_traceNearest
 
-  logical function trc_traceOcclusion(c, r) result(isFound)
+
+logical function trc_traceOcclusion(c, r) result(isFound)
     type(cnt_grid3d) :: c
     type(ray)        :: r
     type(trc_gridTrace) :: gTrace
@@ -494,10 +495,10 @@ contains
 
     end do
 
-  end function trc_traceOcclusion
+end function trc_traceOcclusion
 
 
-  real(FD) function trc_traceOpticalDepth(c, m, r) result(oDepth)
+real(FD) function trc_traceOpticalDepth(c, m, r) result(oDepth)
     type(cnt_grid3d)    :: c
     type(mat_material)  :: m
     type(ray)           :: r
@@ -564,10 +565,10 @@ contains
        end do
 
     end do
+end function trc_traceOpticalDepth
 
-  end function trc_traceOpticalDepth
 
-  real(FD) function trc_tracePhysicalDepth(c, r) result(depth)
+real(FD) function trc_tracePhysicalDepth(c, r) result(depth)
     type(cnt_grid3d)    :: c
     type(ray)           :: r
     type(trc_gridTrace) :: gTrace
@@ -626,29 +627,23 @@ contains
           end if
        end do
     end do
+end function trc_tracePhysicalDepth
 
 
-  end function trc_tracePhysicalDepth
-
-  subroutine trc_traceRayToOpticalDepth(c, r, gamma, mat, matMu)
+subroutine trc_traceRayToOpticalDepth(c, r, gamma, mat, matMu)
     type(cnt_grid3d) :: c
     type(ray)        :: r
     real(FD)         :: gamma
-
     type(mat_material), optional :: mat
     real(fd),           optional :: matMu
-
     type(trc_gridTrace)                  :: gTrace
     type(intersection_geometry)          :: isect
     type(prt_sphere),            pointer :: cPart
     type(trc_depthListElem),     pointer :: root
-
     real(FD)    :: oDepth, oDepth_t, s, t, muTotal
-
     integer(IL) :: k
     integer     :: pGrid(3)
     integer     :: x, y, z
-
     logical     :: isFound
 
     cPart => null()
@@ -669,7 +664,6 @@ contains
     r % tEnd = TRACE_HUGE
     r % rayID  = r % rayID + RAY_ID_INCR
 
-
     if(present(mat)) then
        call mat_evalMu(mat, r%energy, muTotal = muTotal)
     else if(present(matMu)) then
@@ -687,9 +681,7 @@ contains
     !!
 
     do k = 1, c % grid(x, y, z) % nParts
-
        cPart =>  c%parts(c % grid(x, y, z) % plist(k))
-
        if(cPart % rayID /= r % rayID) then
           isFound = prt_sph_trace(cPart, r, iSect)
           r % tEnd = TRACE_HUGE
@@ -708,14 +700,12 @@ contains
        end if
     end do
 
-
     !! If optical depth is smaller than the given value, continue trace.
     !!
     if(gamma > oDepth) then
        call trc_gridTrace_init(gTrace, c, r)
        do
           if(.not. trc_gridTrace_stepPeriodic(gTrace, x, y, z)) exit
-
           do k = 1, c % grid(x, y, z) % nParts
              cPart =>  c%parts(c % grid(x, y, z) % plist(k))
               if(cPart % rayID /= r % rayID) then
@@ -729,7 +719,6 @@ contains
                 end if
              end if
           end do
-
           if(gamma < oDepth ) exit
        end do
 
@@ -743,7 +732,6 @@ contains
              r % status = RAY_EXIT_U
           end if
        end if
-
     end if
 
     !if(oDepth < 1e-6) then
@@ -755,7 +743,6 @@ contains
     !!
     oDepth = 0.0_fd
     if(associated(root) .and. r%status == RAY_ACTIVE) then 
-
        call trc_setFirstElem(root)
        do
           !! Compute the maximum optical depth for the ray intersecting
@@ -794,36 +781,30 @@ contains
              t = sqrt(root%t) + (gamma - oDepth) / root%mu
              exit
           end if
-
           if(associated(root%next)) then
              root => root%next
           else
              exit
           end if
-
        end do
-
        r%P = r%P + t*r%D
-       
        if(r%P(1) >  c%hWidth) r%P(1)  =  modulo(r%P(1), c%hWidth) - c%hWidth
        if(r%P(1) < -c%hWidth) r%P(1)  = -modulo(r%P(1), c%hWidth) + c%hWidth
        if(r%P(2) >  c%hWidth) r%P(2)  =  modulo(r%P(2), c%hWidth) - c%hWidth
        if(r%P(2) < -c%hWidth) r%P(2)  = -modulo(r%P(2), c%hWidth) + c%hWidth
        if(r%P(3) <      0.0) r%status = RAY_EXIT_D
        if(r%P(3) > c%height) r%status = RAY_EXIT_U
-
     end if
-
-
     if(.not. associated(root)) then
        r % status = RAY_EXIT_D
     end if
-
     call trc_deleteElemTree(root)
+end subroutine trc_traceRayToOpticalDepth
 
-  end subroutine trc_traceRayToOpticalDepth
 
-  recursive subroutine trc_gatherRadiance(G, E, L, P, N, W, nSamples, nOrders, o, Il, albedo, brdf, Pf, Pp)
+! Compute the radiance from a surface point, tracing new rays recursively if
+! multiple scattering orders are required.
+recursive subroutine trc_gatherRadiance(G, E, L, P, N, W, nSamples, nOrders, o, Il, albedo, brdf, Pf, Pp)
     type(cnt_grid3d), intent(inout)        :: G
     real(fd), dimension(3), intent(IN)     :: E, L, P, N
     real(fd), dimension(nOrders)           :: Il
@@ -831,63 +812,49 @@ contains
     integer,  intent(IN)                   :: nSamples(nOrders), nOrders, o
     real(fd)                               :: albedo
     real(fd), external                     :: brdf
-
     real(fd), external                     :: Pf
     real(fd)                               :: Pp(10)
-
-  
     type(intersection_geometry) :: iSect
     type(ray) :: r, rS
     integer   :: i, oo
-
     real(fd)  :: ww, dw
-
     logical   :: pFound, pLit
 
+    ! Make a ray that points at the light source
     call ray_init(rS, RAY_TYPE_SHADOW)
-
     rS%D      = L
     rS%P      = P
-
+    ! Check whether the ray has a clear path to the light source
     pLit      = .not. trc_traceOcclusion(G, rS)
-
     if(pLit) then
-       !$omp atomic
-       Il(o) = Il(o) + W * brdf(L, E, N, albedo, Pf, Pp)
+        !$omp atomic
+        Il(o) = Il(o) + W * brdf(L, E, N, albedo, Pf, Pp)
     end if
 
+    ! Compute further orders of scattering recursively
     if((o < nOrders) .and. (W > 1e-9)) then
-       oo  = o + 1
-
-       dw  = TWO_PI / real(nSamples(oo), fd)
-
-       call ray_init(r,  RAY_TYPE_CAMERA)
-
-       do i=1, nSamples(oo)
-
-          do
-             r%D = vec_cart_random_spherical_uniform()
-             ww  = brdf(r%D, E, N, albedo, Pf, Pp)
-             if(ww > 0.0_fd) exit
-          end do
-
-          ww        = dw * W * ww
-          r%P       = P
-  
-          pFound    = trc_traceNearest(G, r, iSect)
-  
-          if(pFound) then 
-             call trc_gatherRadiance(G, r%D, L, iSect%P1 + TRACE_EPS * iSect%N, iSect%N, ww, &
-                  & nSamples, nOrders, oo, Il, albedo, brdf, Pf, Pp)
-          end if
-
-          !$omp atomic
-          r%rayID   = r%rayID + RAY_ID_INCR
-
-       end do
+        oo  = o + 1
+        dw  = TWO_PI / real(nSamples(oo), fd)
+        call ray_init(r,  RAY_TYPE_CAMERA)
+        do i=1, nSamples(oo)
+            do
+                r%D = vec_cart_random_spherical_uniform()
+                ww  = brdf(r%D, E, N, albedo, Pf, Pp)
+                if(ww > 0.0_fd) exit
+            end do
+            ww        = dw * W * ww
+            r%P       = P
+            pFound    = trc_traceNearest(G, r, iSect)
+            if(pFound) then
+                call trc_gatherRadiance(G, r%D, L, iSect%P1 + TRACE_EPS * iSect%N, iSect%N, ww, &
+                     & nSamples, nOrders, oo, Il, albedo, brdf, Pf, Pp)
+            end if
+            !$omp atomic
+            r%rayID   = r%rayID + RAY_ID_INCR
+        end do
     end if
+end subroutine trc_gatherRadiance
 
-  end subroutine trc_gatherRadiance
 
   !> Finds the true medium surface intersection point for a ray coming from direction d to
   !! the point (x,y,z).
@@ -900,7 +867,7 @@ contains
   !! \param[in]   d      The direction vector of the incident ray
   !! \param[out]  isect  Intersection geoemtry
   !!
-  logical function trc_findSurfaceIntersection(c, p, d, isect) result(isFound)
+logical function trc_findSurfaceIntersection(c, p, d, isect) result(isFound)
     type(cnt_grid3d), intent(in) :: c
     real(fd),         intent(in) :: p(3)
     real(fd),         intent(in) :: d(3)
@@ -919,6 +886,6 @@ contains
 
     isFound = trc_traceNearest(c, r, isect)
 
-  end function trc_findSurfaceIntersection
+end function trc_findSurfaceIntersection
 
 end module trace
