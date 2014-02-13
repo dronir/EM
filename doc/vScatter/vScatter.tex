@@ -1,0 +1,205 @@
+\documentclass[a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amssymb, amsmath}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{textcomp}
+\usepackage[english]{babel}
+\usepackage[pdftex]{color, graphicx}
+
+\providecommand{\abs}[1]{\lvert#1\rvert}
+
+\newcommand{\code}[1]{\lstinline{#1}}
+\lstset{basicstyle=\ttfamily\small, numbers=left, tabsize=4}
+
+\newcommand{\this}[0]{\texttt{vScatter}}
+\newcommand{\prog}[1]{\texttt{#1}}
+
+\begin{document}
+	
+\title{The \this~manual}
+\author{Olli Wilkman}
+
+\maketitle
+
+\tableofcontents
+
+\section{Overview}
+
+\this~is a program for calculating shadowing effects in visible light scattering from particulate media. It works in a variety of different modes.
+
+\subsection{Shadowing}
+
+When calculating shadowing, multiple scattering or scattering laws are not considered. The simulation only checks whether a tested point is lit or not, and gives the ratio of lit points to all checked points, which approximates the shadowing function $S(\mu_0, \mu, \phi)$. This means that every lit point contributes an equal amount and $I(\mu_0, \mu, \phi)=1$ always.
+
+\subsection{Lambertian scattering}
+
+In Lambertian scattering
+
+\[
+	I(\mu_0, \mu, \phi) = \frac{\omega}{\pi} \mu_0,
+\]
+
+where $\omega$ is the single-scattering albedo.
+
+
+
+\subsection{Lommel-Seeliger scattering}\label{LommelSeeliger}
+
+The Lommel-Seeliger scattering law as implemented in this program is
+
+\[
+	I(\mu_0, \mu, \phi) = \frac{\omega}{4 \pi} \frac{\mu_0}{\mu_0 + \mu} P_V(\alpha),
+\]
+
+where $\omega$ is the single-scattering albedo and $P_V(\alpha)$ is a phase function. 
+
+The phase function can be either a constant $P_V(\alpha) = 1$, a single Henyey-Greensein function or a a sum of two Henyey-Greenstein functions. The Henyey-Greenstein function is defined as
+
+\[
+	\text{HG}(\alpha ; g) = \frac{1 - g^2}{(1 + g^2 - 2 g \sin \alpha)},
+\]
+
+where $g$ is the \emph{asymmetry parameter}.
+
+The double Henyey-Greenstein function is defined as 
+
+\[
+	\text{HG}_2(\alpha ; w, g_1, g_2) = w \frac{1 - g_1^2}{(1 + g_1^2 - 2 g_1 \sin \alpha)}
+	+ (1-w) \frac{1 - g_2^2}{(1 + g_2^2 - 2 g_2 \sin \alpha)}
+\]
+
+where $g_1$ and $g_2$ are the asymmetry parameters of the two components and $w$ defines their relative weights.
+
+
+\subsection{Radiative Transfer}
+
+I'm not sure what this is, but it's defined as 
+
+\[
+	I(\mu_0, \mu, \phi) = \frac{\omega}{4 \pi} \frac{\mu_0}{\mu_0 + \mu} P_V(\alpha) H(\mu_0, \omega) H(\mu, \omega),
+\]
+
+where 
+\begin{align}
+H(\mu, \omega) =& \left( 1 - \omega \mu \left(r_0 + \frac{1}{2} \left(1 - 2 r_0 \mu \right) \log \left(1 + \frac{1}{x} \right)\right) \right)^{-1} \\
+r_0 =& \frac{1-\sqrt{1- \omega}}{1+\sqrt{1- \omega}}
+\end{align}
+
+and $P_V$ works exactly like in the Lommel-Seeliger case.
+
+\subsection{Monte Carlo}
+
+This is something else altogether.
+
+
+
+\section{Input file}\label{input}
+
+An example \this~input file can be seen in Listing \ref{inputlst}.
+
+\textbf{Important:} It is not clear from Listing \ref{inputlst}, because the \LaTeX~package used to produce it removes trailing whitespace, but there \emph{must} be a newline or a space after the slash which ends the input file on the last line. You will get an error about an unexpected end-of-file if the EOF is right after the slash.
+
+The input file must start with \code{&params} and end in a slash. In between are parameter value assignments separated by commas. Most of the parameter names are quite self-describing. Most of them have default values, which are used if the parameters are not specified in the file.
+
+It is not necessary to define all parameters in the input file. In that case a default value is used. This is useful because many of the possible parameters do not seem to be used by the program.
+
+\begin{description}
+	\item[gridResHorizontal]
+	\item[gridResVertical]
+	\item[hsCarPlotFilename] is not used.
+	\item[hsSphPlotFilename] is not used.
+	\item[hsFilename] is the name of the output (``hemisphere'') file.
+	\item[mediumFilename] is the path to the medium file used by the simulation.
+	\item[sDistribution] is not used at the moment.
+	\item[rho] is not used at the moment.
+	\item[rhoAllowedError] is not used at the moment.
+	\item[sampleSeed] does not seem to be used by the program.
+	\item[resThetaE] is the $\theta_e$ resolution, that is, the number of different $\theta_e$ values used. The output hemisphere is binned binned in this many equal-width bins along the $\theta_e$ direction.
+	\item[nThetaIn] is the $\theta_i$ resolution.
+	\item[thetaIn] is a string giving a list of incidence angles. There must be as many numbers as given by \code{nThetaIn}.
+	\item[nOrders] is the number of scattering orders that the ray is followed to.
+	\item[nSamplesPerOrder] is a string giving the numbers of raytracing samples for each scattering order. If \code{nOrders = 3}, then this parameter must contain three numbers, separated by a space, for example \code{nSamplesPerOrder =} \code{"50 20 10"}. The default value is \code{"1"}.
+	\item[mu] is the extinction coefficient $\mu$.
+	\item[w] is the single scattering albedo $\omega$.
+
+	\item[brdfType] gives the type of BRDF function. The different options are \code{shadowing}, \code{Lambert}, \code{LommelSeeliger}, \code{RadTransfer} and \code{MonteCarlo}. %See Section TODO for details.
+	\item[brdfPhaseFunction] can be supplied if \code{brdfType} is \code{LommelSeeliger} or \code{RadTransfer}. The options are \code{constant}, \code{HG1} and \code{HG2}. %See Section TODO for details.
+	\item[pfParams] is a string giving the phase function parameters, separated by spaces. The interpretation of the parameters depends on which phase function is chosen. If \code{brdfPhaseFunction} is \code{HG1}, the first parameter is used as the asymmetry parameter of the HG function. If \code{brdfPhaseFunction} is \code{HG2}, three parameters are required and the order is $w$, $g_1$, $g_2$ (see Section \ref{LommelSeeliger} for definitions). If \code{brdfPhaseFunction} is \code{constant}, no parameters are needed.
+	\item[nPfParams] gives the number of phase function parameters. It must be set equal to the number of parameters given in the \code{pfParams} string, or the code is not able to read the parameters correctly
+	
+	\item[rf\_applyFields] is a Boolean value telling whether or not to apply a random field to the medium surface to simulate surface roughness. In most cases this is what you want to do. A random surface is generated and the medium is clipped by removing all spheres above that surface. The value should be either \code{.true.} or \code{.false.}. The default value is \code{.false.}.
+	\item[rf\_nFieldsPerMed] gives the number of random field realizations to use for the medium. It is a good idea to use several for better statistics. The default value is \code{1}.
+	\item[rf\_spectrumType] gives the type of surface statistic used to generate the random field. It can be either \code{Gaussian} for Gaussian statistics, \code{fBm} for fractal statistics or \code{constant} for clipping by a plane surface. The default value is \code{"Gaussian"}.
+	\item[rf\_P] is a parameter of the random field and its meaning is different for each type. For Gaussian statistics it is the correlation length $l$. For fBm statistics it is the Hurst exponent $H$. In both of these cases it controls the horizontal scale of the surface roughness. For a planar surface it is the fraction of the medium height at which it is clipped. The default value is \code{0.5}. % TODO: add references
+	\item[rf\_std] is the standard deviation parameter $\sigma/L$ which controls the amplitude of the random field. It gives the standard deviation of the heights relative to the horizontal width of the medium. The default value is \code{1.0}.
+	\item[nThreads] would be used for distributing. How this works, I don't currently know. % TODO: figure out how the multitasking works
+	\item[mediumMapRes]
+	\item[mediumDensitymapRes]
+\end{description}
+
+\begin{lstlisting}[float, frame=trbl, caption="Example input file", label=inputlst]
+&params
+  resThetaE = 45,
+  gridResHorizontal = 200,
+  gridResVertical = 10,
+
+  hsCarPlotFilename = "vScatter_car.eps",
+  hsSphPlotFilename = "vScatter_sph.eps",
+  hsFilename = "hemisphere.nc",
+
+  mediumFilename = "medium.bc",
+  sDistribution = "constant",
+
+  rho = 0.50_fd,
+  rhoAllowedError = 0.05_fd,
+
+  sampleSeed = 0,
+
+  nThetaIn = 1,
+  thetaIn = "45.0",
+
+  nOrders = 1,
+  nSamplesPerOrder = "1",
+
+  mu = 1.0,
+  w = 0.1,
+
+  nPfParams = 1,
+  pfParams = "0.0",
+
+  brdfType = "shadowing",
+  brdfPhaseFunction = "constant",
+
+  rf_applyFields = .false.,
+  rf_nFieldsPerMed = 1,
+  rf_spectrumType = "Gaussian",
+  rf_P = 0.5_fd,
+  rf_std = 1.0_fd,
+
+  nThreads = 1,
+  mediumMapRes = 256,
+  mediumDensitymapRes = 300,
+/
+
+\end{lstlisting}
+
+\section{Medium file}\label{medium}
+
+The medium file is any output file from the \code{medgen} program. See the \code{medgen} documentation for more information. 
+
+When doing these computations, make sure that the medium file is thick enough that no rays escape through it.
+
+Also note that a medium file can contain several media. The simulation will be run for each medium, and the results will be \emph{combined} in the output.
+% TODO: figure out multiple media behaviour for vScatter
+% TODO: add suggestion for medgen parameter values
+
+
+\section{Output file}\label{output}
+
+
+
+
+\end{document}

@@ -1,0 +1,36 @@
+&params
+resultFile         = "hs_sp_mf.nc"
+srcSpectrumFile    = "../../data/ti_tube_25keV.dat"
+
+srcType            = "spectrum"
+srcLineEnergy      = 9000.0
+nSrcSamples        = 25000
+
+nThetaIn           = 5
+thetaIn            = "  0.    21.25  42.5   63.75  85.  "
+
+outputType         = "hemisphere"
+hemisphereThetaRes = 10
+nEmergenceAngles   = 10
+thetaEm            = "  0.           9.44444444  18.88888889  28.33333333  37.77777778
+  47.22222222  56.66666667  66.11111111  75.55555556  85.        "
+phiEm              = " 0.  0.  0.  0.  0.  0.  0.  0.  0.  0."
+
+energyMax	   = 24000.0
+
+matName            = "Test Si/Al"
+nElements          = 2
+elements           = "Si Al"
+elemFracs          = "0.5 0.5"
+
+nSamples           = 25000
+nOrders            = 1
+
+method             = "mc_force"
+
+obsHalfAngle       = 2.5
+
+nThreads           = 4
+verbose            = .True.
+/
+

@@ -1,0 +1,20 @@
+#!/bin/csh
+
+#BSUB -L /bin/csh
+
+#BSUB -J ${jobName}
+#BSUB -e error.txt
+#BSUB -o out.txt
+
+#BSUB -M 300000
+#BSUB -W 20:00
+#BSUB -n 1
+
+#BSUB -u "hannu.p.parviainen@helsinki.fi"
+#BSUB -N
+#BSUB -B
+
+## run 
+srun $$WRKDIR/vScatter/vScatter $$WRKDIR/vScatter/${brdfType}/$parFile
+
+#bjobs -l $$LSB_JOBID

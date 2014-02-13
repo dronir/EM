@@ -1,0 +1,871 @@
+!****h* XR/container_grid3D
+! NAME
+!   container_grid3D
+!
+! DESCRIPTION
+!   Three-dimensional grid container for spherical particles.
+!   Optimal when generating packings of notable height.
+!
+! NOTES
+!   Care must be taken to set the height and vertical resolution of
+!   the container, since this has a notable effect on the packing
+!   speed. Container height of the expected packing height is fine,
+!   and height/resolution should be greater than the diameter of
+!   the largest particles.
+!
+!
+! AUTHOR
+!   Hannu Parviainen
+!
+! USES
+!   Base
+!   Particle
+!
+!
+! CREATION DATE
+!   04.09.2007
+!******
+MODULE container_grid3D
+  USE base
+  USE particle
+  USE distributions
+  USE netcdf
+
+!$  USE omp_lib
+
+  IMPLICIT NONE
+
+  PRIVATE
+
+  PUBLIC  :: cnt_grid3D, cnt_gridCell
+
+  PUBLIC  :: cnt_grid3D_init,                cnt_grid3D_destroy, &
+       &     cnt_grid3D_optimizeGrid,        cnt_grid3D_packParticles, &
+       &     cnt_grid3D_getHeight_xy,        cnt_grid3D_export_rib, &
+       &     cnt_grid3D_cmpDensity,          cnt_grid3D_cmpDensityMC, &
+       &     cnt_grid3D_cmpDensityStructure, cnt_grid3D_cmpHeightMap, &
+       &     cnt_grid3D_cmpStats,            cnt_grid3D_quantizePosition
+
+  !****d* container_grid3D/pMin
+  ! NAME
+  !   pMin
+  !
+  ! DESCRIPTION
+  !   Minimum number of particles allocated for a vector.
+  !
+  !******
+  INTEGER, PARAMETER :: pMin = 5
+
+  !****s* container_grid3D/g_cell
+  ! NAME
+  !   g_cell
+  !
+  ! DESCRIPTION
+  !
+  !******
+  TYPE :: cnt_gridCell
+     INTEGER  :: nParts, lSize
+     INTEGER, DIMENSION(:), POINTER :: pList
+  END TYPE cnt_gridCell
+
+  !****s* container_grid3D/cnt_grid3D
+  ! NAME
+  !   cnt_grid3D
+  !
+  ! DESCRIPTION
+  !
+  !******
+  TYPE :: cnt_grid3D
+     REAL(fd) :: width, hWidth, height, rw, wr, rh, hr
+     INTEGER  :: res_xy, res_z, nParts
+
+     !****d* container_grid3D/maxHeight_g
+     ! NAME
+     !   maxHeight_g
+     !
+     ! DESCRIPTION
+     !   Maximum global gridded height of the container.  
+     !
+     !******
+     INTEGER :: maxHeight_g 
+
+     !****d* container_grid3D/maxHeight_l
+     ! NAME
+     !   maxHeight_l
+     !
+     ! DESCRIPTION
+     !   Maximum gridded height of the container per (x,y)-cell.  
+     !
+     !******
+     INTEGER, DIMENSION(:,:), POINTER :: maxHeight_l
+
+     !****d* container_grid3D/parts
+     ! NAME
+     !   parts
+     !
+     ! DESCRIPTION
+     !   Particle array.
+     !
+     !******
+     TYPE(prt_sphere), DIMENSION(:),     POINTER :: parts
+
+
+     !****d* container_grid3D/grid
+     ! NAME
+     !   grid
+     !
+     ! DESCRIPTION
+     !   Three-dimensional array of cnt_gridCell structures holding the actual
+     !   grid-structure.
+     !
+     !******
+     TYPE(cnt_gridCell), DIMENSION(:,:,:), POINTER :: grid
+  END TYPE cnt_grid3D
+
+CONTAINS
+  
+  !****f* container_grid3D/cnt_grid3D_init
+  ! NAME
+  !   cnt_grid3D_init
+  !
+  ! DESCRIPTION
+  !   Initializes a cnt_grid3D container.
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !   w : real       ... Width of the container
+  !   r : real       ... Resolution of the grid
+  !   n : integer    ... Number of particles
+  !
+  ! SOURCE
+  SUBROUTINE cnt_grid3D_init(c, w, h, r_xy, r_z, parts)
+    TYPE(cnt_grid3D), INTENT(INOUT) :: c
+    INTEGER,          INTENT(IN)    :: r_xy, r_z
+    REAL(FD),         INTENT(IN)    :: w, h
+
+    type(prt_sphere), dimension(:), pointer :: parts
+
+    INTEGER :: i, j, k
+
+    WRITE(*,'(A)') "Initializing grid3D"
+
+    c % width   = w
+    c % height  = h
+    c % res_xy  = r_xy
+    c % res_z   = r_z
+    c % nParts = size(parts)
+
+    c % hwidth  = w * 0.5
+    c % rw      = REAL(r_xy) / w
+    c % wr      = w / REAL(r_xy)
+    c % rh      = REAL(r_z) / h
+    c % hr      = h / REAL(r_z)
+
+    c%parts => parts
+
+    ALLOCATE(c%grid(r_xy,r_xy,r_z))
+    ALLOCATE(c%maxHeight_l(r_xy,r_xy))
+
+    c % maxHeight_g    = 1
+    c % maxHeight_l    = 1
+
+    c % grid % nParts  = 0
+
+    DO k=1,r_z
+       DO j=1,r_xy
+          DO i=1,r_xy
+             ALLOCATE(c % grid(i,j,k) % plist(pMin))
+          END DO
+       END DO
+    END DO
+
+    c % grid % lsize = pMin
+
+    WRITE(*,'(A)') "... Complete"
+
+  END SUBROUTINE cnt_grid3D_init
+  !******
+
+  subroutine cnt_grid3D_destroy(c)
+    TYPE(cnt_grid3D), INTENT(INOUT) :: c
+    integer :: i, j, k
+
+    do k=1,c%res_z
+       do j=1,c%res_xy
+          do i=1,c%res_xy
+             deallocate(c % grid(i,j,k) % plist)
+          end do
+       end do
+    end do
+
+    deallocate(c%maxHeight_l)
+    deallocate(c%grid)
+    
+    nullify(c%maxHeight_l)
+    nullify(c%grid)
+
+  end subroutine cnt_grid3D_destroy
+
+
+
+  function cnt_grid3D_isPointInsideParticle(c, p, pInd) result(isInside)
+    type(cnt_grid3D) :: c
+    real(FD), dimension(3) :: p 
+    logical :: isInside
+    integer(IL), optional  :: pInd
+    
+    integer :: i, pG(3)
+
+    isInside = .false.
+
+    pG = cnt_grid3D_quantizePosition(c, p)
+
+    do i=1, c%grid(pG(1), pG(2), pG(3))%nParts
+       if(sum((p-c%parts(c%grid(pG(1), pG(2), pG(3))%plist(i))%p)**2) < c%parts(c%grid(pG(1), pG(2), pG(3))%plist(i))%rr) then
+          isInside = .true.
+          pInd     = i
+          exit
+       end if
+    end do
+
+  end function cnt_grid3D_isPointInsideParticle
+
+  !****f* container_grid3D/cnt_grid3D__add_sphere_to_cells
+  ! NAME
+  !   cnt_grid3D__add_sphere_to_cells
+  !
+  ! DESCRIPTION
+  !   
+  !
+  ! INPUTS
+  !   c  : cnt_grid3D ... Container
+  !   si : integer    ... Sphere index
+  !   la : integer(2) ... 
+  !   lb : integer(2) ... 
+  !
+  ! SOURCE
+  subroutine cnt_grid3D_addParticleToCells(c, si, la, lb)
+    type(cnt_grid3D) :: c    
+    integer :: si, x, y, z
+    integer, dimension(:), pointer :: tmp
+    integer, dimension(3) :: la, lb
+    
+
+    do z = la(3), lb(3)
+       do y = la(2), lb(2)
+          do x = la(1), lb(1)
+
+             !! Manual reallocation of the data array if the array is full.
+             !!
+             if(c % grid(x,y,z) % nParts == c % grid(x,y,z) % lsize) then
+                tmp => c % grid(x,y,z) % plist
+                allocate(c % grid(x,y,z) % plist(c % grid(x,y,z) % lsize + pmin))
+                c % grid(x,y,z) % plist(:c % grid(x,y,z) % nParts) = tmp
+                deallocate(tmp)
+                c % grid(x,y,z) % lsize = c % grid(x,y,z) % lsize + pmin
+             end if
+
+             !! Add the sphere index to the array.
+             !!
+             c % grid(x,y,z) % plist(c % grid(x,y,z) % nParts + 1) = si
+             c % grid(x,y,z) % nParts = c % grid(x,y,z) % nParts + 1
+
+             if(z > c % maxHeight_l(x,y)) c % maxHeight_l(x,y) = z
+
+             tmp => null()
+          end do
+       end do
+
+       if(z > c % maxHeight_g) c % maxHeight_g = z
+
+    end do
+  end subroutine cnt_grid3D_addParticleToCells
+  !******
+
+
+  !****f* container_grid3D/cnt_grid3D_optimize_grid
+  ! NAME
+  !   cnt_grid3D_optimize_grid
+  !
+  ! DESCRIPTION
+  !   
+  !
+  ! INPUTS
+  !   c          : cnt_grid3D  ... Container
+  !
+  ! SOURCE
+  SUBROUTINE cnt_grid3D_optimizeGrid(c)
+    TYPE(cnt_grid3D) :: c
+
+    REAL(FD) :: pp(3)
+    INTEGER :: i, x, y, z, la(3), lb(3)
+
+    WRITE(*,*) "Recalculating world bounds and optimizing grid."
+
+    c % height = MAXVAL(c % parts(:) % P(3) + c % parts(:) % r)
+    c % rh     = REAL(c%res_z) / c%height
+    c % hr     = c%height / REAL(c%res_z)
+
+    c % grid % nParts = 0
+    c % grid % lsize   = pMin
+
+    DO z = 1, c % res_z
+       DO y = 1, c % res_xy
+          DO x = 1, c % res_xy
+             DEALLOCATE(c % grid(x,y,z) % plist)
+             ALLOCATE(c % grid(x,y,z) % plist(pMin))
+             c % grid(x,y,z) % plist = 0
+          END DO
+       END DO
+    END DO
+
+    DO i = 1, c % nParts
+       pp = c%parts(i)%P
+
+       la(1:2) = FLOOR((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw) + 1
+       lb(1:2) = FLOOR((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw) + 1
+
+       WHERE(la < 1)        la = 1
+       WHERE(lb > c%res_xy) lb = c%res_xy
+
+       la(3) = FLOOR((pp(3) - c%parts(i) % r) * c % rh) + 1
+       lb(3) = FLOOR((pp(3) + c%parts(i) % r) * c % rh) + 1
+
+       IF(la(3) < 1) la(3) = 1
+       IF(la(3) > c%res_z) la(3) = c%res_z
+
+       IF(lb(3) > c%res_z) lb(3) = c%res_z
+
+       CALL cnt_grid3D_addParticleToCells(c, i, la, lb)
+    END DO
+
+    WRITE(*,*) "Done."
+  END SUBROUTINE cnt_grid3D_optimizeGrid
+  !******
+
+
+  FUNCTION cnt_grid3D_cmpDropHeight(c, cPa, cPaIdx, p, lim2D_a, lim2D_b, iDrop) RESULT(height)
+    TYPE(cnt_grid3D), INTENT(IN) :: c
+    TYPE(prt_sphere),     INTENT(IN) :: cPa
+    integer, intent(in) :: cPaIdx
+    REAL(FD), DIMENSION(:,:), INTENT(IN) :: p
+    INTEGER, DIMENSION(:,:), INTENT(IN) :: lim2D_a, lim2D_b
+    INTEGER, INTENT(IN) :: iDrop
+
+    TYPE(prt_sphere), POINTER :: oPa
+
+    REAL(FD) :: height
+
+    INTEGER :: gx, gy, gz, iPart, nDown, np, k
+
+    integer, dimension(:), pointer :: pList 
+
+    integer, dimension(300) :: ppList
+
+    REAL(FD) :: l  !! Squared distance of the sphere centers in (x,y)-plane.
+    REAL(FD) :: d  !! Squared sum of the sphere radii.
+    REAL(FD) :: h  !! Height of the new sphere center.
+
+    LOGICAL  :: iFound
+ 
+    height = 0.0_fd
+    iFound = .false.
+    nDown  = 0
+
+    ! Starting from the top, loop through the bins intersecting
+    ! the xy-projection of the sphere searching for the resting
+    ! height.
+    !
+
+    DO gz = MAXVAL(c % maxHeight_l(lim2D_a(1, iDrop):lim2D_b(1, iDrop), lim2D_a(2, iDrop):lim2D_b(2, iDrop))),1,-1
+          DO gy = lim2D_a(2, iDrop), lim2D_b(2, iDrop)
+             DO gx = lim2D_a(1, iDrop), lim2D_b(1, iDrop)
+             
+                pList => c % grid(gx,gy,gz) % plist
+                np = c % grid(gx,gy,gz) % nParts
+
+                k = 0
+                do iPart = 1, np
+                   if(cPaIdx > pList(iPart)) then
+                      k = k + 1
+                      ppList(k) = pList(iPart)
+                   end if
+                end do
+
+
+                ! Loop through the particles in each bin.
+                ! 
+
+                DO iPart = 1, k
+
+                   oPa => c % parts( ppList(iPart) )
+
+                   l = SUM( ( p(1:2,iDrop) - oPa%P(1:2) )**2 )
+                   d = cPa%rr + oPa%rr + 2.0 * cPa%r * oPa%r
+
+                   IF(l < d) THEN
+                      iFound = .true.
+                      
+                      h = SQRT(d - l) + oPa % P(3)
+                      IF(height < h) THEN
+                         height = h
+                      END IF
+                   END IF
+
+                END DO
+
+             END DO
+          END DO
+
+       ! How many cells down do we check after the first intersection?
+       !
+       if(iFound) nDown  = nDown + 1
+       if(nDown > 1) EXIT
+
+    END DO
+
+  END FUNCTION cnt_grid3D_cmpDropHeight
+
+  !****f* container_grid3D/cnt_grid3D_dropParticle
+  ! NAME
+  !   cnt_grid3D_dropParticle
+  !
+  ! DESCRIPTION
+  !   
+  !
+  ! INPUTS
+  !   c          : cnt_grid3D  ... Container
+  !   sI         : integer     ... Sphere index
+  !   nDrops     : integer     ... Number of drops.
+  !
+  ! RESULT
+  !    cnt_grid3D_drop_sphere (integer)
+  !
+  ! SOURCE
+  !
+  subroutine cnt_grid3D_dropParticle(c, sI, nDrops)
+    TYPE(cnt_grid3D), INTENT(INOUT) :: c
+    INTEGER, INTENT(IN)             :: sI, nDrops
+
+    INTEGER,  DIMENSION(2, nDrops)  :: lim2D_a, lim2D_b
+    INTEGER,  DIMENSION(3)          :: lim3D_a, lim3D_b
+    INTEGER                         :: iDrop, iMinHeight(1)
+
+    REAL(FD), DIMENSION(nDrops)     :: height
+    REAL(FD), DIMENSION(2,nDrops)   :: p
+ 
+    TYPE(prt_sphere), POINTER       :: cPa, oPa
+
+!!$    ! $omp parallel
+
+    cPa => c%parts(sI)
+
+    !$omp single
+
+    call dst_generate_uniform(p(1,:), -c%hWidth, c%hWidth)
+    call dst_generate_uniform(p(2,:), -c%hWidth, c%hWidth)
+      
+    lim2D_a = FLOOR((p - cPa%r + c%hwidth) * c%rw) + 1
+    lim2D_b = FLOOR((p + cPa%r + c%hwidth) * c%rw) + 1
+ 
+    WHERE(lim2D_a < 1)        lim2D_a = 1
+    WHERE(lim2D_b > c%res_xy) lim2D_b = c%res_xy
+
+    height = 1.0
+
+    !$omp end single copyprivate(height, p, lim2D_a, lim2D_b) ! copyprivate(cPa, p, lim2D_a, lim2D_b) 
+
+!    write(*,'((I3),(F7.4))') omp_get_thread_num(), height(1)
+
+    ! $omp flush
+    ! $omp barrier
+
+    !$omp do private(iDrop) schedule(static)
+    DO iDrop = 1, nDrops
+       height(iDrop) = cnt_grid3D_cmpDropHeight(c, cPa, sI, p, lim2D_a, lim2D_b, iDrop)
+       !write(*,*) iDrop, nDrops, lim2D_a(:,iDrop), omp_get_thread_num()
+    END DO
+    !$omp end do
+ 
+    ! $omp flush
+    ! $omp barrier
+
+    !$omp workshare
+    iMinHeight = MINLOC(height)
+    !$omp end workshare
+
+    !$omp sections
+    cPa%P(1:2)   = p(:,iMinHeight(1))
+    cPa%P(3)     = height(iMinHeight(1))
+    !$omp section
+    lim3D_a(1:2) = lim2D_a(:,iMinHeight(1))
+    lim3D_b(1:2) = lim2D_b(:,iMinHeight(1))
+    !$omp end sections
+ 
+    !$omp single
+    IF(c%height < cPa%P(3)) THEN
+       c%height = cPa%P(3) + cPa % r
+    END IF
+    !$omp end single
+
+!!$    !$omp flush
+
+    !$omp  sections
+    lim3D_a(3) = FLOOR((cPa%P(3) - cPa % r) * c % rh) + 1
+    !$omp section
+    lim3D_b(3) = FLOOR((cPa%P(3) + cPa % r) * c % rh) + 1
+    !$omp end sections
+
+    !$omp barrier
+    !$omp flush
+
+    !$omp single
+    IF(lim3D_a(3) < 1) lim3D_a(3) = 1
+    IF(lim3D_a(3) > c%res_z) lim3D_a(3) = c%res_z
+
+    IF(lim3D_b(3) > c%res_z) lim3D_b(3) = c%res_z
+
+    !write(*,*) sI, omp_get_thread_num()
+
+    !CALL cnt_grid3D_addParticleToCells(c, sI, lim3D_a, lim3D_b)
+
+    !$omp end single
+    ! $omp end parallel
+  END subroutine cnt_grid3D_dropParticle
+  !******
+
+  !****f* container_grid3D/cnt_grid3D_pack_spheres
+  ! NAME
+  !   cnt_grid3D_pack_spheres
+  !
+  ! DESCRIPTION
+  !   Subroutine to pack spherical particles inside the cnt_grid_2D
+  !   container. Calls cnt_grid3D_drop_sphere for each particle in
+  !   the container, and computes the statistics.
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !
+  ! SOURCE
+  !
+  SUBROUTINE cnt_grid3D_packParticles(c, nDrops)
+    TYPE(cnt_grid3D) :: c
+
+    INTEGER  :: nDrops, i, success
+    REAL(FD) :: p, dp, dpp
+
+    REAL     :: ta(2)
+    REAL     :: tStart, tCurr, tElap
+    REAL(FD) :: pp(3)
+
+    INTEGER  :: x, y, z, la(3), lb(3)
+
+    WRITE(*,'(A)') "\nPacking media:"
+
+    CALL CPU_TIME(tstart)
+
+    dp  = 100.0_fd / REAL(c%nParts, KIND=FD)
+    dpp = 5.0_fd
+
+    WRITE(*,*) " Completed   Elapsed   Estimated"
+
+    !$!omp parallel private(i, success, tElap, tCurr) shared(tStart, dpp, dp, p)
+
+    p = 0.0_fd
+
+    !$omp parallel
+
+    WRITE(*,*) "using ", omp_get_num_threads(), "threads"
+
+    DO i = 1, c%nParts
+ 
+       call cnt_grid3D_dropParticle(c, i, nDrops)
+ 
+       !$omp single
+       !$omp atomic
+       p = p + dp
+ 
+       IF(p >= dpp) THEN
+          CALL CPU_TIME(tCurr)
+          tElap = tCurr - tStart
+          WRITE(*,'("   " F6.1 "    " F7.2 "    " F7.2)') p, tElap, tElap * (100.0 / p)
+          dpp = dpp + 5.0_fd
+       END IF
+
+       !$omp end single
+
+    END DO
+    !$omp end parallel
+
+    CALL CPU_TIME(tCurr)
+    tElap = tCurr - tStart
+    WRITE(*,'("   " F6.1 "    " F7.2 "    " F7.2)') p, tElap, tElap * (100.0 / p)
+
+    CALL cnt_grid3D_optimizeGrid(c)
+
+  END SUBROUTINE cnt_grid3D_packParticles
+  !******
+
+  FUNCTION cnt_grid3D_getHeight_xy(c, P) RESULT(h)
+    TYPE(cnt_grid3D), INTENT(IN) :: c
+    REAL(FD), DIMENSION(2), INTENT(IN) :: p
+    REAL(FD) :: h
+
+    TYPE(prt_sphere), POINTER :: cPa
+    INTEGER, DIMENSION(2) :: gp
+    INTEGER  :: gx, gy, gz, iPart
+    REAL(FD) :: xy_sqr, ht
+
+    gp = FLOOR((P + c%hWidth) * c % rw) + 1
+
+    gx = gp(1)
+    gy = gp(2)
+
+    ht = 0.0_fd
+    h  = 0.0_fd
+
+!    DO gz = c % maxHeight_l(gx, gy), 1, -1
+    DO gz = c % maxHeight_g, 1, -1
+       DO iPart = 1, c % grid(gx,gy,gz) % nParts
+
+          cPa => c % parts( c % grid(gx,gy,gz) % plist(iPart) )
+          xy_sqr = SUM((cPa%P(1:2) - P)**2)
+
+          IF(xy_sqr < cPa%rr) THEN
+             ht = SQRT(cPa%rr - xy_sqr) + cPa % P(3)
+             IF(ht > h) h = ht
+          END IF
+
+       END DO
+       if(h>0.0_fd) exit
+    END DO
+
+  END FUNCTION cnt_grid3D_getHeight_xy
+
+
+  !****f* container_grid3D/cnt_grid3D_export_rib
+  ! NAME
+  !   cnt_grid3D_export_rib
+  !
+  ! DESCRIPTION
+  !   
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !
+  !******
+  SUBROUTINE cnt_grid3D_export_rib(c)
+    TYPE(cnt_grid3D) :: c
+    INTEGER          :: i
+    
+    !Open(1, FILE="particles.rib", status='REPLACE')
+    !Write(1,*) 'Points "P" [', c%parts(:) % P, '] "width" [', 2.0 * c%parts%r, '] "uniform string type" "sphere"'
+    !Close(1)
+
+    OPEN(1, FILE="particles.rib", status='REPLACE')
+    OPEN(2, FILE="spheres.dat", status='REPLACE')
+
+    WRITE(1,*) 'Points "P" [' 
+
+    DO i=1, c % nParts
+       WRITE(1,*) c%parts(i) % P
+    END DO
+
+    WRITE(1,*) '] "width" ['
+
+    DO i=1, c % nParts
+       WRITE(1,*) 2.0 * c%parts(i)%r
+    END DO
+
+    WRITE(1,*) '] "uniform string type" "sphere"'
+
+    DO i=1, c % nParts
+       WRITE(2,*) c%parts(i)%P(1), c%parts(i)%P(2), c%parts(i)%P(3), c%parts(i)%r
+    END DO
+
+    CLOSE(1)
+    CLOSE(2)
+
+  END SUBROUTINE cnt_grid3D_export_rib
+
+
+  !****f* container_grid3D/cnt_grid3D_cmp_porosity
+  ! NAME
+  !   cnt_grid3D_cmp_porosity
+  !
+  ! DESCRIPTION
+  !   Computes the porosity of the particulate medium inside
+  !   the container. Simply, the volume of the container - the volume of the
+  !   spheres inside the container.
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !
+  ! RESULT
+  !    cnt_grid3D_cmp_porosity : real
+  !
+  !******
+  REAL(fd) FUNCTION cnt_grid3D_cmpDensity(c) result(rho)
+    TYPE(cnt_grid3D), INTENT(in) :: c
+
+    REAL :: r, volParts, volCont
+
+    r = 4.0/3.0 * 3.1416
+    volParts = SUM(r * c%parts%r**3)
+    volCont  = c%width**2 * c%height
+    rho = volParts / volCont
+
+  END FUNCTION cnt_grid3D_cmpDensity
+
+  !****f* container_grid3D/cnt_grid3D_cmp_porosity_mc
+  ! NAME
+  !   cnt_grid3D_cmp_porosity_mc
+  !
+  ! DESCRIPTION
+  !   Computes the porosity of the particulate medium inside
+  !   the container using Monte-Carlo sampling. 
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !
+  ! RESULT
+  !    cnt_grid3D_cmp_porosity : real
+  !
+  !******
+  REAL(fd) FUNCTION cnt_grid3D_cmpDensityMC(c, nSamples) result(rho)
+    TYPE(cnt_grid3D), INTENT(in) :: c
+    integer :: nSamples, i, x, y, z
+    integer(il) :: pId
+
+    REAL(fd) :: sample(3)
+
+    rho = 0.0_fd
+
+    DO z = 1, c % res_z
+       DO y = 1, c % res_xy
+          DO x = 1, c % res_xy
+
+             do i=1, nSamples
+                call dst_generate_uniform(sample, 0.0_fd, 1.0_fd )
+                sample(1) = (real(x, fd) - sample(1)) * c%wr - c%hWidth
+                sample(2) = (real(y, fd) - sample(2)) * c%wr - c%hWidth
+                sample(3) = (real(z, fd) - sample(3)) * c%hr
+
+                if(cnt_grid3D_isPointInsideParticle(c, sample, pId)) rho = rho + 1.0_fd
+             end do
+
+          END DO
+       END DO
+    END DO
+
+    rho = rho / real(nSamples * c%res_z * c%res_xy * c%res_xy, fd)
+
+  END FUNCTION cnt_grid3D_cmpDensityMC
+
+  !****f* container_grid3D/cnt_grid3D_cmpPorosityStructure
+  ! NAME
+  !   cnt_grid3D_cmpPorosityStructure
+  !
+  ! DESCRIPTION
+  !   Computes the porosity of the particulate medium inside
+  !   the container using Monte-Carlo sampling. 
+  !
+  ! INPUTS
+  !   c : cnt_grid3D ... Container
+  !
+  ! RESULT
+  !    cnt_grid3D_cmp_porosity : real
+  !
+  !******
+  subroutine cnt_grid3D_cmpDensityStructure(c, nSamples, rho)
+    TYPE(cnt_grid3D), INTENT(in) :: c
+    integer :: nSamples, iSample, iHeight
+    real(fd), dimension(:) :: rho
+
+    REAL(fd) :: sample(3), dz, hdz
+    integer(il) :: pId
+
+    dz  = c%height / real(size(rho), fd)
+    hdz = 0.5_fd * dz
+
+    rho = 0.0_fd
+    do iHeight=1, size(rho)
+       sample(3)   = iHeight * dz - hdz
+       do iSample=1, nSamples
+          call dst_generate_uniform(sample(1:2), 0.0_fd, 1.0_fd )
+          sample(1:2) = sample(1:2) * c % width - c % hWidth
+
+          if(cnt_grid3D_isPointInsideParticle(c, sample, pId)) rho(iHeight) = rho(iHeight) + 1.0_fd
+       end do
+
+       rho(iHeight) = 1.0_fd - rho(iHeight) / real(nSamples, fd)
+    end do
+
+  end subroutine cnt_grid3D_cmpDensityStructure
+
+  !****f* container_grid3D/cnt_grid3D_quantizePosition
+  ! NAME
+  !   cnt_grid3D_quantizePosition
+  !
+  ! DESCRIPTION
+  !   Returns the cell 
+  !
+  ! INPUTS
+  !   c     : cnt_grid3D ... Container
+  !   pos_r : real       ... Position of the point
+  !
+  !
+  ! RESULT
+  !   pos_g : real       ... Quantized position
+  !
+  ! SOURCE
+  PURE function cnt_grid3D_quantizePosition(c, pos_r) RESULT(pos_g)
+    TYPE(cnt_grid3D), INTENT(IN) :: c
+    REAL(FD), DIMENSION(3), INTENT(IN) :: pos_r
+    INTEGER, DIMENSION(3) :: pos_g
+
+    pos_g(1:2) = FLOOR((pos_r(1:2) + c%hwidth) * c%rw) + 1
+    pos_g(3)   = FLOOR((pos_r(3) ) * c%rh) + 1
+
+  end function cnt_grid3D_quantizePosition
+  !******
+
+  function cnt_grid3D_cmpHeightMap(c, res) result(hMap)
+    TYPE(cnt_grid3D) :: c
+    integer :: res
+
+    REAL(FD), DIMENSION(res,res) :: hMap
+
+    integer  :: i, j
+    REAL(FD) :: dl, hdl
+
+    dl  = c % width / res
+    hdl = 0.5_fd * dl
+
+    DO i=1,res
+       DO j=1,res
+          hMap(j,i) = cnt_grid3D_getHeight_xy(c, (/ j*dl - hdl - c%hwidth, i*dl - hdl - c%hwidth /))
+       END DO
+    END DO
+
+  end function cnt_grid3D_cmpHeightMap
+
+  subroutine cnt_grid3D_cmpStats(c, res, mean, std, hMin, hMax)
+    TYPE(cnt_grid3D), intent(IN) :: c
+    integer, intent(IN) :: res
+
+    REAL(FD) ::  mean
+    REAL(FD), OPTIONAL :: std, hMin, hMax
+    REAL(FD), DIMENSION(res,res) :: hMap
+
+    hMap = cnt_grid3D_cmpHeightMap(c,res)
+
+    mean = SUM(hMap) / res**2
+
+    if(PRESENT(std))  std  = SQRT(SUM(hMap**2) / res**2 - mean**2)
+    if(PRESENT(hMin)) hMin = MINVAL(hMap)
+    if(PRESENT(hMax)) hMax = MAXVAL(hMap)
+
+  end subroutine cnt_grid3D_cmpStats
+
+END MODULE container_grid3D

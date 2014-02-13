@@ -1,0 +1,1 @@
+build_interface_module(xraylib xraylib_wrap.F90)

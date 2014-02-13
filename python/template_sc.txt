@@ -1,0 +1,32 @@
+t_vscatter = """
+&params
+mediumFileName    = "${mFilename}"
+hsFilename        = "${oFilename}"
+sDistribution     = "constant"
+resThetaE         = $rTheta
+gridResHorizontal = 400
+gridResVertical   = 10
+rho               = 0.5
+rhoAllowedError   = 100.0
+sampleSeed        = 0
+
+nThetaIn	  = $nTheta
+thetaIn           = "$theta"
+
+nOrders           = $nOrders
+nSamplesPerOrder  = "$nSamples 1"
+
+rf_applyFields    = ${applyFields}
+rf_nFieldsPerMed  = $nFields
+rf_spectrumType   = "${sType}"
+rf_P              = $H
+rf_std            = $std
+
+w		  = $omega
+mu		  = $mu
+
+brdfType          = "${brdfType}"
+
+nThreads          = $nThreads
+/
+"""

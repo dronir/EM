@@ -1,0 +1,19 @@
+&params
+  outFilename = "dscatter.scangles",
+  mediumFilename = "../medgen/medium_rho_035.nc",
+  photFilename = "nadir_noise.nc",
+
+  gridResHorizontal = 200,
+  gridResVertical = 10,
+
+  nOrders = 1,
+  nSamplesPerOrder = "150",
+
+  rf_applyFields = .true.,
+  rf_nFieldsPerMed = 2,
+  rf_spectrumType = "fBm",
+  rf_P = 0.5,
+  rf_std = 0.02,
+
+  nThreads = 1,
+/

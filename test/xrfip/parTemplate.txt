@@ -1,0 +1,35 @@
+&params
+resultFile         = "${result_file}"
+srcSpectrumFile    = "$src_spectrum_file"
+
+srcType            = "${source_type}"
+srcLineEnergy      = ${source_line_energy}
+nSrcSamples        = ${n_source_samples}
+
+nThetaIn           = ${n_incidence_angles}
+thetaIn            = "${incidence_angles}"
+
+outputType         = "${output_type}"
+hemisphereThetaRes = ${hs_theta_resolution}
+nEmergenceAngles   = ${n_emergence_angles}
+thetaEm            = "${theta_em}"
+phiEm              = "${phi_em}"
+
+energyMax	   = ${energy_max}
+
+matName            = "${material_name}"
+nElements          = ${n_elements}
+elements           = "${elements}"
+elemFracs          = "${element_fractions}"
+
+nSamples           = ${n_samples}
+nOrders            = ${n_orders}
+
+method             = "${simulation_method}"
+
+obsHalfAngle       = ${obs_half_angle}
+
+nThreads           = ${n_threads}
+verbose            = ${verbose}
+/
+

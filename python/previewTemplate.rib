@@ -1,0 +1,86 @@
+##RenderMan RIB-Structure 1.0
+version 3.03
+FrameBegin 1
+Display "$mediumFile.tif" "file" "rgba" 
+Format 2300 2300 -1.000000
+Projection "perspective" "fov" [ 90.000000 ] 
+FrameAspectRatio 1.0
+ScreenWindow -0.232155 0.232155 -0.209643 0.209643
+Identity
+#rh->lh
+Scale -1.000000 1.000000 1.000000
+#Camera!
+Rotate -30.000053 1.000000 0.000000 0.000000
+Rotate 135.000000 0.000000 1.000000 0.000000
+Translate -8.778300 -8.511730 -8.766732
+PixelSamples 2.000000 2.000000
+PixelFilter "gaussian" 2.000000 2.000000
+Exposure 1.000000 1.000000
+Quantize "rgba" 255 0 255 0.500000
+Declare "minsamples" "integer"
+Option "render" "minsamples" [ 4 ] 
+Declare "maxsamples" "integer"
+Option "render" "maxsamples" [ 64 ] 
+Declare "max_raylevel" "integer"
+Option "render" "max_raylevel" [ 4 ] 
+Declare "minshadowbias" "float"
+Option "render" "minshadowbias" [ 0.010000 ] 
+Declare "prmanspecular" "integer"
+Option "render" "prmanspecular" [ 1 ] 
+Declare "steps" "integer"
+Option "radiosity" "steps" [ 0 ] 
+Declare "minpatchsamples" "integer"
+Option "radiosity" "minpatchsamples" [ 2 ] 
+Declare "texturememory" "integer"
+Option "limits" "texturememory" [ 10000 ] 
+Declare "geommemory" "integer"
+Option "limits" "geommemory" [ 40000 ] 
+WorldBegin
+#Lights!
+TransformBegin
+ConcatTransform [ 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000 0.000000 0.000000 0.000000 0.000000 1.000000 ]
+Declare "shadows" "string"
+Attribute "light" "shadows" [ "off" ] 
+Declare "Kocc" "float"
+Declare "samples" "float"
+Declare "maxdist" "float"
+Declare "distribution" "string"
+Declare "__nonspecular" "float"
+LightSource "occlight" 0 "Kocc" [ 1.000000 ] "samples" [ $nSamples ] "maxdist" [ 999999961690316245365415600208216064.000000 ] "distribution" [ "cosine" ] "__nonspecular" [ 1.000000 ] 
+Illuminate 0 1
+TransformEnd
+Identity
+#Action!
+Surface "matte" 
+AttributeBegin
+TransformBegin
+Rotate -89.999962 1.000000 0.000000 0.000000
+Color [ 1.000000 1.000000 1.000000 ]
+Opacity [ 1.000000 1.000000 1.000000 ]
+ShadingInterpolation "smooth"
+Declare "Ka" "float"
+Declare "Kd" "float"
+Surface "matte" "Ka" [ 1.000000 ] "Kd" [ 1.000000 ] 
+Declare "transmission" "string"
+Attribute "visibility" "transmission" [ "$transmission" ] 
+
+ReadArchive "$mediumFile"
+
+TransformEnd
+AttributeEnd
+AttributeBegin
+TransformBegin
+Rotate -89.999962 1.000000 0.000000 0.000000
+Color [ 1.000000 1.000000 1.000000 ]
+Opacity [ 1.000000 1.000000 1.000000 ]
+ShadingInterpolation "smooth"
+Declare "Ka" "float"
+Declare "Kd" "float"
+Surface "matte" "Ka" [ 1.000000 ] "Kd" [ 1.000000 ] 
+Declare "transmission" "string"
+Attribute "visibility" "transmission" [ "opaque" ] 
+Disk 0.000000 4.000000 360.000000 
+TransformEnd
+AttributeEnd
+WorldEnd
+FrameEnd

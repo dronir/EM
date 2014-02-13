@@ -1,0 +1,31 @@
+&params
+resultFile         = "tb_ln_an.nc"
+
+srcType            = "line"
+srcLineEnergy      = 9000.0
+
+nThetaIn           = 9
+thetaIn            = " 0. 10. 20. 30. 40. 50. 60. 70. 80. "
+
+outputType         = "tabulated"
+nEmergenceAngles   = 9
+thetaEm            = " 0. 10. 20. 30. 40. 50. 60. 70. 80. "
+phiEm              = " 0.  0.  0.  0.  0.  0.  0.  0.  0. "
+
+energyMax	   = 10000.0
+
+matName            = "Si Ti Al Fe"
+nElements          = 4
+elements           = "Si Ti Al Fe"
+elemFracs          = "0.25 0.25 0.25 0.25"
+
+nPosSamples        = 100
+nSrcSamples        = 100
+nOrders            = 1
+
+method             = "analytic"
+
+nThreads           = 1
+verbose            = .True.
+/
+

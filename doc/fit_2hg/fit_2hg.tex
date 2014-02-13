@@ -1,0 +1,135 @@
+\documentclass[a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amssymb, amsmath}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{textcomp}
+\usepackage[english]{babel}
+\usepackage[pdftex]{color, graphicx}
+
+\providecommand{\abs}[1]{\lvert#1\rvert}
+
+\newcommand{\code}[1]{\lstinline{#1}}
+\lstset{basicstyle=\ttfamily\small, numbers=left, tabsize=4}
+
+\newcommand{\this}[0]{\texttt{fit\_2hg}}
+\newcommand{\prog}[1]{\texttt{#1}}
+
+\begin{document}
+	
+\title{The \this~manual}
+\author{Olli Wilkman}
+
+\maketitle
+
+\tableofcontents
+
+\section{Overview}
+
+In scattering laws, shadowing effects on the surface are usually modelled with a so called \emph{shadowing function} $S(\mu_0, \mu, \phi)$. The shadowing function of a surface is a function of the observational geometry and gives the fraction of the visible surface which is lit by the light source in a given geometry. When every visible point is lit, $S = 1$, and when the entire surface is shadowed, $S=0$.
+
+\this~is a ray-tracing program for calculating numerical shadowing functions for sphere-particulate media. It takes in a medium file from \prog{medgen} and a photometry file (see below) containing a number of observation geometries. For each geometry the code then traces a number of rays from light source to random points on the surface, and calculates the number of lit and visible points. This number, divided by the number of rays, approximates the shadowing function in that geometry.
+
+\section{Input file}\label{input}
+
+An example \this~input file can be seen in Listing \ref{inputlst}.
+
+\textbf{Important:} It is not clear from Listing \ref{inputlst}, because the \LaTeX~package used to produce it removes trailing whitespace, but there \emph{must} be a newline or a space after the slash which ends the input file on line 19. You will get an error about an unexpected end-of-file if the EOF is right after the slash.
+
+The input file must start with \code{&params} and end in a slash. Most of the parameter names are quite self-describing. Most of them have default values, which are used if the parameters are not specified in the file.
+
+\begin{description}
+	\item[outFilename] gives the name of the output file. If the parameter is not specified, the default value is \code{dscatter.scangles}.
+	\item[mediumFilename] gives the name of the medium file (see Section \ref{medium}). The default value is \code{medium.nc}.
+	\item[photFilename] gives the name of the photometry file (see Section \ref{phot}). The default value is \code{photometry.nc}.
+	\item[gridResHorizontal] % TODO: figure out what this exactly does
+	\item[gridResVertical] % TODO: figure out what this exactly does
+	\item[nOrders] is the number of scattering orders in the simulation, but its value does not actually affect the simulation and should be kept at 1. The default value is \code{1}.
+	\item[nSamplesPerOrder] is a string giving the numbers of raytracing samples for each scattering order. If \code{nOrders = 3}, then this parameter must contain three numbers, separated by a space, for example \code{nSamplesPerOrder =} \code{"50 20 10"}. In any case only the first number is used by the program. The default value is \code{"1"}.
+	\item[rf\_applyFields] is a Boolean value telling whether or not to apply a random field to the medium surface to simulate surface roughness. In most cases this is what you want to do. A random surface is generated and the medium is clipped by removing all spheres above that surface. The value should be either \code{.true.} or \code{.false.}. The default value is \code{.false.}.
+	\item[rf\_nFieldsPerMed] gives the number of random field realizations to use for the medium. It is a good idea to use several for better statistics. The default value is \code{1}.
+	\item[rf\_spectrumType] gives the type of surface statistic used to generate the random field. It can be either \code{Gaussian} for Gaussian statistics, \code{fBm} for fractal statistics or \code{constant} for clipping by a plane surface. The default value is \code{"Gaussian"}.
+	\item[rf\_P] is a parameter of the random field and its meaning is different for each type. For Gaussian statistics it is the correlation length $l$. For fBm statistics it is the Hurst exponent $H$. In both of these cases it controls the horizontal scale of the surface roughness. For a planar surface it is the fraction of the medium height at which it is clipped. The default value is \code{0.5}. % TODO: add references
+	\item[rf\_std] is the standard deviation parameter $\sigma/L$ which controls the amplitude of the random field. It gives the standard deviation of the heights relative to the horizontal width of the medium. The default value is \code{1.0}.
+	\item[full\_output] is a boolean which tells the program whether to include the full ray statistics in the output file. These contribute a significant amount to the size of the output, and if they are not needed, this option is best set to \code{.false.} to save disk space. The default value is \code{.true.}.
+	\item[nThreads] % TODO: figure what this exactly does
+\end{description}
+
+\begin{lstlisting}[float, frame=trbl, caption="Example input file", label=inputlst]
+&params
+  outFilename = "dscatter.scangles",
+  mediumFilename = "medium_rho_035.nc",
+  photFilename = "nadir_noise.nc"
+
+  gridResHorizontal = 200,
+  gridResVertical = 10,
+
+  nOrders = 1,
+  nSamplesPerOrder = "50",
+
+  rf_applyFields = .false.,
+  rf_nFieldsPerMed = 1,
+  rf_spectrumType = "fBm",
+  rf_P = 0.5,
+  rf_std = 0.02,
+
+  nThreads = 1,
+/
+	
+\end{lstlisting}
+
+\section{Medium file}\label{medium}
+
+The medium file is any output file from the \code{medgen} program. See the \code{medgen} documentation for more information. 
+
+When doing these computations, make sure that the medium file is thick enough that no rays escape through it. This kind of problem may be noticeable in the \this~output as unusually low numbers of illuminated samples.
+
+Also note that a medium file can contain several media. The simulation will be run for each medium, and the results will be \emph{combined} in the output.
+% TODO: add suggestion for medgen parameter values
+
+\section{Photometry file}\label{phot}
+
+The ``photometry file'' contains the geometries for which the shadowing function is calculated. It needs to be a NetCDF file containing a dimension named \code{n_datapoints} and four variables: \code{intensity}, \code{i_theta}, \code{e_theta} and \code{e_phi}. Listing \ref{photolst} contains the header of an example photometry file as shown by the \code{ncdump} utility.
+
+The dimension \code{n_datapoints} simply tells how many data points there are. The variable \code{intensity} is not used by \this. The \code{i_theta} variable contains the incidence angles (angle between surface normal and incoming ray) for each data point, while \code{e_theta} contains the emergence angles (angle between surface normal and outgoing ray). The \code{e_phi} variable contains the azimuth angle, which is the angle between the planes spanned by the normal vector and the incident ray, and the normal vector and the emergent ray. All the angles need to be in radians.
+
+\begin{lstlisting}[float, frame=trbl, caption="Photometry file header", label=photolst]
+dimensions:
+        n_datapoints = 1000 ;
+variables:
+        double intensity(n_datapoints) ;
+        double i_theta(n_datapoints) ;
+        double e_theta(n_datapoints) ;
+        double e_phi(n_datapoints) ;
+\end{lstlisting}
+
+\section{Output file}\label{output}
+
+The output file is also in NetCDF format. There are two dimensions and either one or four variables. The header of an example output file can be found in Listing \ref{outputlst}. 
+
+The dimension \code{n_datapoints} is the number of different geometries and comes directly from the photometry file. 
+
+The dimension \code{n_samples} is the total number of raytracing samples (rays) calculated for each geometry. It's value is determined by \code{nSamplePerOrders} times \code{rf_nFieldsPerMed}.
+
+The variable \code{n_illuminated} has a dimension \code{n_datapoints} and contains for each geometry the number of lit and visible raytracing samples. This value divided by \code{n_samples} approximates the shadowing function for that geometry.
+
+\textbf{Important:} If there are more than one medium in the medium file, the above is not true. In this case the value of \code{n_samples} is unchanged, but the actual number of rays traced is \code{n_samples} times the number of media. This number can not be determined from the output file, which is why it is advisable to make sure there is only one medium per medium file.
+
+If the option \code{full\_output} is set to \code{.true.}, the output file will include the variables \code{mu}, \code{mu0} and \code{cosa}. These variables have a dimension of \code{n_datapoints} $\times$ \code{n_samples}. They contain for each ray of each datapoint the local values of $\mu$, $\mu_0$ and $\cos \alpha$ at the surface point which the ray strikes and may be used to calculate scattering law contributions, if desired. If \code{full\_output} is \code{.false.}, these variables are not included in the file.
+
+\begin{lstlisting}[float, frame=trbl, caption="Output file header", label=outputlst]
+dimensions:
+        n_samples = 300 ;
+        n_datapoints = 1000 ;
+variables:
+        int n_illuminated(n_datapoints) ;
+        float mu(n_datapoints, n_samples) ;
+        float mu0(n_datapoints, n_samples) ;
+        float cosa(n_datapoints, n_samples) ;
+\end{lstlisting}
+
+
+
+\end{document}

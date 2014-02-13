@@ -1,0 +1,29 @@
+&params
+mediumFileName    = "../../data/media/uniform/medium_rho_020.nc"
+hsFilename        = "test_050_uni.vsc"
+sDistribution     = "uniform"
+resThetaE         = 45
+gridResHorizontal = 400
+gridResVertical   = 10
+
+sampleSeed        = 3
+
+nThetaIn          = 3
+thetaIn           = "0.0 40.0 80.0"
+
+nOrders           = 2
+nSamplesPerOrder  = "350 4 1"
+
+rf_applyFields    = .false.
+rf_nFieldsPerMed  = 1
+rf_spectrumType   = "fBm"
+rf_P              = 0.6
+rf_std            = 0.06
+
+w                 = 0.1
+mu		  = 1.0e2
+
+brdfType          = "MonteCarlo"
+!brdfType          = "LommelSeeliger"
+brdfType          = "RadTransfer"
+/
