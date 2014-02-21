@@ -150,7 +150,6 @@ program geomScatter
     call med_mediumFileSelectMedia(Mf)
 
     if(rf_applyFields) then
-        write(*,'(("Using medium file "),(A))') mediumFilename
         call utl_message("Roughness spectrum type used: " // rf_spectrumType)
         select case(rf_spectrumType)
         case('Gaussian')
