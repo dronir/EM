@@ -258,8 +258,8 @@ program vScatter
            end select
        case("RadTransfer")
            call sampleHemisphere(brdf_RadTrans, nSamplesPerOrderTable(1), phase_function_constant, pfParamsTable)
-        case("MonteCarlo")
-           call sampleHemisphere_MC(nSamplesPerOrderTable(1))
+!        case("MonteCarlo")
+!           call sampleHemisphere_MC(nSamplesPerOrderTable(1))
            !call simulation_method_montecarlo(M, thetaInTable, H, mu, w, nSamplesPerOrderTable(1))
         case default
            call utl_fatal_error("Unsupported BRDF type.")
@@ -395,140 +395,140 @@ contains
 
   end subroutine sampleHemisphere
 
-  subroutine sampleHemisphere_MC(nSamples)
-    integer   :: nSamples
-
-    integer, parameter :: RAY_OK   = 0
-    integer, parameter :: RAY_EXIT = 1
-    integer, parameter :: RAY_LOW  = 2
-
-    type(ray) :: rC, rPeel
-    type(intersection_geometry) :: iSect
-
-    real(fd), dimension(2,nSamples) :: samples
-    real(fd), dimension(3)          :: pSurface(3)
-    real(fd), dimension(3,nThetaIn) :: D
-    real(fd)                        :: dz, thtIn
-    integer  :: i, j, k, iTheta, rayStat, order
-    logical  :: pFound, pLit
-
-    real(fd) :: l(1), optDepth
-    real     :: tstRnd
-
-    integer  :: rInfo, rSeed(1), rState(640)
-
-    D(1,:) = -sin(thetaInTable)
-    D(2,:) = 0.0_fd
-    D(3,:) = cos(thetaInTable)
-
-    call smpl_griddedSamples2D(samples, nSamples)
-
-    samples = (samples * M%width - M%hWidth) * 0.5_fd
-
-    !$omp parallel default(none)                  &
-    !$omp shared(M, H, D, nSamples, samples, nOrders, nSamplesPerOrderTable, nThetaIn, thetaInTable, w, mu, timer) &
-    !$omp private(rC, dz, thtIn, pSurface, i, j, k, iTheta, tstRnd, optDepth, l, rSeed, rState, rInfo, order, rPeel, rayStat)
- 
-    dz = M%grid%height - M%hMean - TRACE_EPS
-    pSurface(3) = M%hMean
-    call ray_init(rC, RAY_TYPE_CAMERA)
-    !$ rSeed(1) = omp_get_thread_num()+1
-    !call drandinitialize(3, 0, rSeed, 1, rState, 640, rInfo)
-
-    !$omp do schedule(dynamic) 
-    do j = 1, H % resTheta
-       do k = 1, H % resPhi(j)
-
-          ! $omp do schedule(dynamic) 
-          do i= 1, nSamplesPerOrderTable(1)
-             
-             !! Select the sample point of the incident camera ray from
-             !! the mean medium surface.
-             !!
-             pSurface(1:2) = samples(:,i)
-
-                
-             !! Find the intersection of the camera ray and the top of 
-             !! the bounding box of the periodic medium.
-             !!
-             
-             rC % D        = gth_cellRandomSampleCar(H, j, k)
-
-             if(h%type == GTH_TYPE_QS) then
-                call RANDOM_NUMBER(tstRnd)
-                if(tstRnd > 0.5) rC%D(2) = -rC%D(2)
-             end if
-
-             if(rC%D(3) < 1e-2_fd) then
-                rC%D(3) = 1e-2
-                call vec_normalize(rC%D)
-             end if
-
-             rC % status   = RAY_ACTIVE
-             rC % I        = 1.0 / real(nSamplesPerOrderTable(1),fd)
-             rC % P(1)     = pSurface(1) + dz * (rC%D(1) / rC%D(3))
-             rC % P(2)     = pSurface(2) + dz * (rC%D(2) / rC%D(3))
-             rC % P(3)     = M%grid%height - TRACE_EPS
-
-             rC % P(1)     = modulo(rC%P(1)+M%hWidth, M%width) - M%hWidth
-             rC % P(2)     = modulo(rC%P(2)+M%hWidth, M%width) - M%hWidth
-
-             rC % rayID    = rC % rayID + RAY_ID_INCR
-
-             !! Negate the ray.
-             !!
-             rC % D        = - rC % D
-
-             rayStat       = RAY_OK
-             order         = 1                
-             do while(order <= nOrders .and. rayStat == RAY_OK)
-
-                call rnd_generate_exponential(1.0_fd, l)
-                !!call drandexponential(1, 1.0_fd, rState, l, rInfo)
-                call trc_traceRayToOpticalDepth( M%grid, rC, l(1), matMu=mu )
-                rC % rayID  = rC % rayID + RAY_ID_INCR
-
-                if(rC%status == RAY_EXIT_U) then
-                   rayStat = RAY_EXIT
-                   exit
-                else if(rC%status == RAY_EXIT_D) then
-                   rayStat = RAY_LOW
-                   exit
-                end if
-
-                if(rayStat == RAY_OK) then
-
-                   do iTheta = 1, nThetaIn
-                      rPeel        = rC
-                      rPeel%status = RAY_ACTIVE
-                      rPeel%D      = D(:,iTheta)
-                      rC % rayID   = rPeel % rayID + RAY_ID_INCR
-
-                      optDepth     = trc_tracePhysicalDepth(M%grid, rPeel) * mu
-
-                      !$omp atomic
-                      H%data(iTheta, H%cIdx(j)+k-1, order) = H%data(iTheta, H%cIdx(j)+k-1, order) &
-                           & + INV_FOUR_PI * rC%I * w * exp(-optDepth)
-                      
-                   end do
-
-                   rC%D  = vec_cart_random_spherical_uniform()
-                   rC%I  = rC%I * w
-
-                end if
-                order = order + 1
-             end do
-
-          end do
-          ! $omp end do
-          call utl_timerIncrease(timer)  
-
-       end do
-    end do
-    !$omp end do
-    !$omp end parallel
-
-  end subroutine sampleHemisphere_MC
+ ! subroutine sampleHemisphere_MC(nSamples)
+ !   integer   :: nSamples
+ !
+ !   integer, parameter :: RAY_OK   = 0
+ !   integer, parameter :: RAY_EXIT = 1
+ !   integer, parameter :: RAY_LOW  = 2
+ !
+ !   type(ray) :: rC, rPeel
+ !   type(intersection_geometry) :: iSect
+ !
+ !   real(fd), dimension(2,nSamples) :: samples
+ !   real(fd), dimension(3)          :: pSurface(3)
+ !   real(fd), dimension(3,nThetaIn) :: D
+ !   real(fd)                        :: dz, thtIn
+ !   integer  :: i, j, k, iTheta, rayStat, order
+ !   logical  :: pFound, pLit
+ !
+ !   real(fd) :: l(1), optDepth
+ !   real     :: tstRnd
+ !
+ !   integer  :: rInfo, rSeed(1), rState(640)
+ !
+ !   D(1,:) = -sin(thetaInTable)
+ !   D(2,:) = 0.0_fd
+ !   D(3,:) = cos(thetaInTable)
+ !
+ !   call smpl_griddedSamples2D(samples, nSamples)
+ !
+ !   samples = (samples * M%width - M%hWidth) * 0.5_fd
+ !
+ !   !$omp parallel default(none)                  &
+ !   !$omp shared(M, H, D, nSamples, samples, nOrders, nSamplesPerOrderTable, nThetaIn, thetaInTable, w, mu, timer) &
+ !   !$omp private(rC, dz, thtIn, pSurface, i, j, k, iTheta, tstRnd, optDepth, l, rSeed, rState, rInfo, order, rPeel, rayStat)
+ !
+ !   dz = M%grid%height - M%hMean - TRACE_EPS
+ !   pSurface(3) = M%hMean
+ !   call ray_init(rC, RAY_TYPE_CAMERA)
+ !   !$ rSeed(1) = omp_get_thread_num()+1
+ !   !call drandinitialize(3, 0, rSeed, 1, rState, 640, rInfo)
+ !
+ !   !$omp do schedule(dynamic) 
+ !   do j = 1, H % resTheta
+ !      do k = 1, H % resPhi(j)
+ !
+ !         ! $omp do schedule(dynamic) 
+ !         do i= 1, nSamplesPerOrderTable(1)
+ !            
+ !            !! Select the sample point of the incident camera ray from
+ !            !! the mean medium surface.
+ !            !!
+ !            pSurface(1:2) = samples(:,i)
+ !
+ !               
+ !            !! Find the intersection of the camera ray and the top of 
+ !            !! the bounding box of the periodic medium.
+ !            !!
+ !            
+ !            rC % D        = gth_cellRandomSampleCar(H, j, k)
+ !
+ !            if(h%type == GTH_TYPE_QS) then
+ !               call RANDOM_NUMBER(tstRnd)
+ !               if(tstRnd > 0.5) rC%D(2) = -rC%D(2)
+ !            end if
+ !
+ !            if(rC%D(3) < 1e-2_fd) then
+ !               rC%D(3) = 1e-2
+ !               call vec_normalize(rC%D)
+ !            end if
+ !
+ !            rC % status   = RAY_ACTIVE
+ !            rC % I        = 1.0 / real(nSamplesPerOrderTable(1),fd)
+ !            rC % P(1)     = pSurface(1) + dz * (rC%D(1) / rC%D(3))
+ !            rC % P(2)     = pSurface(2) + dz * (rC%D(2) / rC%D(3))
+ !            rC % P(3)     = M%grid%height - TRACE_EPS
+ !
+ !            rC % P(1)     = modulo(rC%P(1)+M%hWidth, M%width) - M%hWidth
+ !            rC % P(2)     = modulo(rC%P(2)+M%hWidth, M%width) - M%hWidth
+ !
+ !            rC % rayID    = rC % rayID + RAY_ID_INCR
+ !
+ !            !! Negate the ray.
+ !            !!
+ !            rC % D        = - rC % D
+ !
+ !            rayStat       = RAY_OK
+ !            order         = 1                
+ !            do while(order <= nOrders .and. rayStat == RAY_OK)
+ !
+ !               call rnd_generate_exponential(1.0_fd, l)
+ !               !!call drandexponential(1, 1.0_fd, rState, l, rInfo)
+ !               call trc_traceRayToOpticalDepth( M%grid, rC, l(1), matMu=mu )
+ !               rC % rayID  = rC % rayID + RAY_ID_INCR
+ !
+ !               if(rC%status == RAY_EXIT_U) then
+ !                  rayStat = RAY_EXIT
+ !                  exit
+ !               else if(rC%status == RAY_EXIT_D) then
+ !                  rayStat = RAY_LOW
+ !                  exit
+ !               end if
+ !
+ !               if(rayStat == RAY_OK) then
+ !
+ !                  do iTheta = 1, nThetaIn
+ !                     rPeel        = rC
+ !                     rPeel%status = RAY_ACTIVE
+ !                     rPeel%D      = D(:,iTheta)
+ !                     rC % rayID   = rPeel % rayID + RAY_ID_INCR
+ !
+ !                     optDepth     = trc_tracePhysicalDepth(M%grid, rPeel) * mu
+ !
+ !                     !$omp atomic
+ !                     H%data(iTheta, H%cIdx(j)+k-1, order) = H%data(iTheta, H%cIdx(j)+k-1, order) &
+ !                          & + INV_FOUR_PI * rC%I * w * exp(-optDepth)
+ !                     
+ !                  end do
+ !
+ !                  rC%D  = vec_cart_random_spherical_uniform()
+ !                  rC%I  = rC%I * w
+ !
+ !               end if
+ !               order = order + 1
+ !            end do
+ !
+ !         end do
+ !         ! $omp end do
+ !         call utl_timerIncrease(timer)  
+ !
+ !      end do
+ !   end do
+ !   !$omp end do
+ !   !$omp end parallel
+ !
+ ! end subroutine sampleHemisphere_MC
 
 
   subroutine sampleDiscrete(nSurfaceSamples, iTheta, iPhi, s)
@@ -601,139 +601,139 @@ contains
 
   end subroutine sampleDiscrete
 
-  subroutine simulation_method_montecarlo(med, theta_i, hs, mu, w, nSamples)
-    type(med_medium)       :: med
-    real(FD), dimension(:) :: theta_i
-    type(gth_hemisphere)   :: hs
-    real(fd)               :: mu, w
-    integer(il)            :: nSamples
-
-    integer, parameter :: RAY_OK   = 0
-    integer, parameter :: RAY_EXIT = 1
-    integer, parameter :: RAY_LOW  = 2
-
-    ! Simulation (logical) variables
-    !
-    integer(il)                     :: iRay, iTht, iThtE, iPhiE
-    integer                         :: rayStat, order
-
-    real(fd), dimension(2,nSamples) :: samples
-    real(fd), dimension(3)          :: pSurface
-    real(fd)                        :: dz
-
-    logical                         :: isInside
-
-    type(intersection_geometry)     :: iSect
-    type(utl_timer)                 :: timer
-
-    ! Physical variables
-    !
-    real(fd)    :: l(1), optDepth
-    type(ray)   :: r_s, r, r_peel
-    real(fd)    :: pTemp(3)
-
-    ! Random number generator variables
-    !
-    integer     :: rInfo, rSeed(1), rState(640)
-
-    !$call omp_set_num_threads(nThreads)
-    call smpl_griddedSamples2D(samples, nSamples)
-
-    call utl_timer_init(timer, 1.0_fd, size(theta_i))
-    do iTht = 1, size(theta_i)
-
-       pSurface(3)  = med%hMean
-       dz           = med%grid%height - med%hMean - TRACE_EPS
-       
-       r_s % status = RAY_ACTIVE
-       r_s % P      = med%grid%height - TRACE_EPS
-       r_s % D      = [ sin(theta_i(iTht)), 0.0_fd, -cos(theta_i(iTht)) ]
-       r_s % I      = 1.0_fd / real(nSamples, fd)
-       r_s % energy = 1.0_fd
-       
-       !$omp parallel default(none) &
-       !$omp shared(r_s, iTht, nSamples, med, hs, mu, w, theta_i, nOrders, pSurface, samples) &
-       !$omp private(iRay, iThtE, iPhiE, rayStat, dz, r, r_peel, optDepth, l, rSeed, rState, rInfo, order)
-       
-       !$rSeed(1) = omp_get_thread_num()+1
-       !call drandinitialize(3, 0, rSeed, 1, rState, 640, rInfo)
-       
-       !$omp do schedule(dynamic) 
-       do iRay = 1, nSamples
-          
-          pSurface(1:2) = samples(:,iRay)
-
-          r          = r_s
-
-          r % P(1)   = pSurface(1) + dz * (r%D(1) / r%D(3))
-          r % P(2)   = pSurface(2) + dz * (r%D(2) / r%D(3))
-
-          r % P(1)   = modulo(r%P(1)+med%hWidth, med%width) - med%hWidth
-          r % P(2)   = modulo(r%P(2)+med%hWidth, med%width) - med%hWidth
-
-          r % rayID  = r % rayID + RAY_ID_INCR
-
-          rayStat    = RAY_OK
-          order      = 1                
-
-          do while(order <= nOrders .and. rayStat == RAY_OK)
-             
-             call rnd_generate_exponential(1.0_fd, l)
-             !call drandexponential(1, 1.0_fd, rState, l, rInfo)
-             call trc_traceRayToOpticalDepth( med%grid, r, l(1), matMu=mu )
-             r % rayID  = r % rayID + RAY_ID_INCR
-
-             if(r%status == RAY_EXIT_U) then
-                rayStat = RAY_EXIT
-                exit
-             else if(r%status == RAY_EXIT_D) then
-                rayStat = RAY_LOW
-                exit
-             end if
-
-             if(rayStat == RAY_OK) then
-
-                do iThtE = 1, hs%resTheta
-                   do iPhiE = 1, hs%resPhi(iThtE)
-
-                      r_peel        = r
-                      r_peel%status = RAY_ACTIVE
-                      r_peel%D      = gth_cellRandomSampleCar(hs, iThtE, iPhiE)
-                      r % rayID     = r_peel % rayID + RAY_ID_INCR
-
-                      optDepth = trc_tracePhysicalDepth(med%grid, r_peel) * mu
-
-                      ! $omp atomic
-                      !hs%data(iTht, hs%cIdx(iThtE)+iPhiE, order) = hs%data(iTht, h%cIdx(iThtE)+iPhiE, order) &
-                      !     & + 0.5 * INV_FOUR_PI * r%I * w * exp(-optDepth)
-
-                      !$omp critical 
-                      call gth_addDataCar(hs, r_peel%D, 0.5 * INV_FOUR_PI * r%I * w * exp(-optDepth), iTht, order)
-                      !call gth_addDataCar(hs, r_peel%D, r_peel%D(1), iTht, order)
-                      !$omp end critical
-                   end do
-                end do
-
-                r%D  = vec_cart_random_spherical_uniform()
-                r%I  = r%I * w
-
-             end if
-             order = order + 1
-          end do
-
-!!$          if(rayStat == RAY_EXIT) then
-!!$             !$omp critical 
-!!$             call gth_addDataCar(hs, r%D, r%I, iTht, iLine)
-!!$             !$omp end critical
-!!$          end if
-
-       end do
-       !$omp end do
-       !$omp end parallel
-
-       call utl_timerIncrease(timer)
-    end do
-  end subroutine simulation_method_montecarlo
+ ! subroutine simulation_method_montecarlo(med, theta_i, hs, mu, w, nSamples)
+ !   type(med_medium)       :: med
+ !   real(FD), dimension(:) :: theta_i
+ !   type(gth_hemisphere)   :: hs
+ !   real(fd)               :: mu, w
+ !   integer(il)            :: nSamples
+ !
+ !   integer, parameter :: RAY_OK   = 0
+ !   integer, parameter :: RAY_EXIT = 1
+ !   integer, parameter :: RAY_LOW  = 2
+ !
+ !   ! Simulation (logical) variables
+ !   !
+ !   integer(il)                     :: iRay, iTht, iThtE, iPhiE
+ !   integer                         :: rayStat, order
+ !
+ !   real(fd), dimension(2,nSamples) :: samples
+ !   real(fd), dimension(3)          :: pSurface
+ !   real(fd)                        :: dz
+ !
+ !   logical                         :: isInside
+ !
+ !   type(intersection_geometry)     :: iSect
+ !   type(utl_timer)                 :: timer
+ !
+ !   ! Physical variables
+ !   !
+ !   real(fd)    :: l(1), optDepth
+ !   type(ray)   :: r_s, r, r_peel
+ !   real(fd)    :: pTemp(3)
+ !
+ !   ! Random number generator variables
+ !   !
+ !   integer     :: rInfo, rSeed(1), rState(640)
+ !
+ !   !$call omp_set_num_threads(nThreads)
+ !   call smpl_griddedSamples2D(samples, nSamples)
+ !
+ !   call utl_timer_init(timer, 1.0_fd, size(theta_i))
+ !   do iTht = 1, size(theta_i)
+ !
+ !      pSurface(3)  = med%hMean
+ !      dz           = med%grid%height - med%hMean - TRACE_EPS
+ !      
+ !      r_s % status = RAY_ACTIVE
+ !      r_s % P      = med%grid%height - TRACE_EPS
+ !      r_s % D      = [ sin(theta_i(iTht)), 0.0_fd, -cos(theta_i(iTht)) ]
+ !      r_s % I      = 1.0_fd / real(nSamples, fd)
+ !      r_s % energy = 1.0_fd
+ !      
+ !      !$omp parallel default(none) &
+ !      !$omp shared(r_s, iTht, nSamples, med, hs, mu, w, theta_i, nOrders, pSurface, samples) &
+ !      !$omp private(iRay, iThtE, iPhiE, rayStat, dz, r, r_peel, optDepth, l, rSeed, rState, rInfo, order)
+ !      
+ !      !$rSeed(1) = omp_get_thread_num()+1
+ !      !call drandinitialize(3, 0, rSeed, 1, rState, 640, rInfo)
+ !      
+ !      !$omp do schedule(dynamic) 
+ !      do iRay = 1, nSamples
+ !         
+ !         pSurface(1:2) = samples(:,iRay)
+ !
+ !         r          = r_s
+ !
+ !         r % P(1)   = pSurface(1) + dz * (r%D(1) / r%D(3))
+ !         r % P(2)   = pSurface(2) + dz * (r%D(2) / r%D(3))
+ !
+ !         r % P(1)   = modulo(r%P(1)+med%hWidth, med%width) - med%hWidth
+ !         r % P(2)   = modulo(r%P(2)+med%hWidth, med%width) - med%hWidth
+ !
+ !         r % rayID  = r % rayID + RAY_ID_INCR
+ !
+ !         rayStat    = RAY_OK
+ !         order      = 1                
+ !
+ !         do while(order <= nOrders .and. rayStat == RAY_OK)
+ !            
+ !            call rnd_generate_exponential(1.0_fd, l)
+ !            !call drandexponential(1, 1.0_fd, rState, l, rInfo)
+ !            call trc_traceRayToOpticalDepth( med%grid, r, l(1), matMu=mu )
+ !            r % rayID  = r % rayID + RAY_ID_INCR
+ !
+ !            if(r%status == RAY_EXIT_U) then
+ !               rayStat = RAY_EXIT
+ !               exit
+ !            else if(r%status == RAY_EXIT_D) then
+ !               rayStat = RAY_LOW
+ !               exit
+ !            end if
+ !
+ !            if(rayStat == RAY_OK) then
+ !
+ !               do iThtE = 1, hs%resTheta
+ !                  do iPhiE = 1, hs%resPhi(iThtE)
+ !
+ !                     r_peel        = r
+ !                     r_peel%status = RAY_ACTIVE
+ !                     r_peel%D      = gth_cellRandomSampleCar(hs, iThtE, iPhiE)
+ !                     r % rayID     = r_peel % rayID + RAY_ID_INCR
+ !
+ !                     optDepth = trc_tracePhysicalDepth(med%grid, r_peel) * mu
+ !
+ !                     ! $omp atomic
+ !                     !hs%data(iTht, hs%cIdx(iThtE)+iPhiE, order) = hs%data(iTht, h%cIdx(iThtE)+iPhiE, order) &
+ !                     !     & + 0.5 * INV_FOUR_PI * r%I * w * exp(-optDepth)
+ !
+ !                     !$omp critical 
+ !                     call gth_addDataCar(hs, r_peel%D, 0.5 * INV_FOUR_PI * r%I * w * exp(-optDepth), iTht, order)
+ !                     !call gth_addDataCar(hs, r_peel%D, r_peel%D(1), iTht, order)
+ !                     !$omp end critical
+ !                  end do
+ !               end do
+ !
+ !               r%D  = vec_cart_random_spherical_uniform()
+ !               r%I  = r%I * w
+ !
+ !            end if
+ !            order = order + 1
+ !         end do
+ !
+!!!$          if(rayStat == RAY_EXIT) then
+!!!$             !$omp critical 
+!!!$             call gth_addDataCar(hs, r%D, r%I, iTht, iLine)
+!!!$             !$omp end critical
+!!!$          end if
+ !
+ !      end do
+ !      !$omp end do
+ !      !$omp end parallel
+ !
+ !      call utl_timerIncrease(timer)
+ !   end do
+ ! end subroutine simulation_method_montecarlo
 
   subroutine rayToBBTop(r, M, pSurface, dz)
     type(ray)        :: r
