@@ -90,6 +90,7 @@ program vScatter
 
   integer                      :: mediumMapRes        = 256
   integer                      :: mediumDensitymapRes = 300
+  logical                      :: saveMediumMap       = .true.
 
   integer                      :: nThreads            = 1
 
@@ -117,7 +118,7 @@ program vScatter
        & brdfType, brdfPhaseFunction, &
        & rf_applyFields, rf_nFieldsPerMed, rf_spectrumType, rf_P, rf_std, &
        & nThreads, &
-       & mediumMapRes, mediumDensitymapRes
+       & mediumMapRes, mediumDensitymapRes, saveMediumMap
 
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -769,8 +770,10 @@ contains
     Call gth_nfCheck( nf90_def_dim(hf%fileID, "Medium_map_resolution", mediumMapRes,       dimMedMapRes   ) )
     Call gth_nfCheck( nf90_def_dim(hf%fileID, "Medium_densitymap_resolution", mediumDensitymapRes, dimMedDenRes   ) )
 
-    Call gth_nfCheck( nf90_def_var(hf%fileID, "Medium_heightmap",  NF90_FLOAT, [dimMedNum,dimMedMapRes,dimMedMapRes], idMedMap) )
-    Call gth_nfCheck( nf90_def_var(hf%fileID, "Medium_densitymap", NF90_FLOAT, [dimMedNum,dimMedDenRes,2],            idMedDen) )
+    if(saveMediumMap) then
+        Call gth_nfCheck( nf90_def_var(hf%fileID, "Medium_heightmap",  NF90_FLOAT, [dimMedNum,dimMedMapRes,dimMedMapRes], idMedMap) )
+        Call gth_nfCheck( nf90_def_var(hf%fileID, "Medium_densitymap", NF90_FLOAT, [dimMedNum,dimMedDenRes,2],            idMedDen) )
+    end if
 
     call gth_hsAddAttS(hf, NF90_GLOBAL, "Brdf_type",                brdfType)
     call gth_hsAddAttF(hf, NF90_GLOBAL, "Theta_in",                 thetaInTable)
@@ -784,16 +787,18 @@ contains
     call gth_hsAddAttF(hf, NF90_GLOBAL, "nMedia", [real(MF%nSelectedMedia,fd)] )
 
     if(rf_applyfields) then
-       call gth_hsAddAttS(hf, NF90_GLOBAL, "srfType",    rf_spectrumType  )
-       call gth_hsAddAttF(hf, NF90_GLOBAL, "nFields",    [real(rf_nFieldsPerMed,fd)] )
-       call gth_hsAddAttF(hf, NF90_GLOBAL, "srfStd",     [rf_P]            )
-       call gth_hsAddAttF(hf, NF90_GLOBAL, "srfRoughP",  [rf_std]          )
+        call gth_hsAddAttS(hf, NF90_GLOBAL, "srfType",    rf_spectrumType  )
+        call gth_hsAddAttF(hf, NF90_GLOBAL, "nFields",    [real(rf_nFieldsPerMed,fd)] )
+        call gth_hsAddAttF(hf, NF90_GLOBAL, "srfStd",     [rf_P]            )
+        call gth_hsAddAttF(hf, NF90_GLOBAL, "srfRoughP",  [rf_std]          )
     end if
 
     call gth_hsSaveData(h, hf)
 
-    Call gth_nfCheck( nf90_put_var(hf%fileID, idMedMap,         mediumHeightMap) )
-    Call gth_nfCheck( nf90_put_var(hf%fileID, idMedDen,         mediumDensityStructure) )
+    if(saveMediumMap) then
+        Call gth_nfCheck( nf90_put_var(hf%fileID, idMedMap,         mediumHeightMap) )
+        Call gth_nfCheck( nf90_put_var(hf%fileID, idMedDen,         mediumDensityStructure) )
+    end if
 
     call gth_hsFileClose(hf)
 
