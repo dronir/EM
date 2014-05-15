@@ -1,4 +1,5 @@
 
+BINPATH=../../build/bin
 
 all: medium_test_uniform.nc medium_test_constant.nc
 

@@ -1,5 +1,5 @@
 
-export BINPATH=$(realpath ../test_build/bin)
+export BINPATH=$(realpath ../build/bin)
 
 .PHONY: default
 default: all
