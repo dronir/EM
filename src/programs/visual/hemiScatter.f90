@@ -106,7 +106,7 @@ program vScatter
     namelist /params/ &
              & resTheta, gridResHorizontal, gridResVertical, &
              & hsCarPlotFilename, hsSphPlotFilename, hsFilename, mediumFilename, &
-             & sDistribution, sampleSeed, &
+             & sampleSeed, &
              & nOrders, nSamplesPerOrder, &
              & mu, w, nPfParams, pfParams, &
              & brdfType, brdfPhaseFunction, &
@@ -394,7 +394,6 @@ contains
 
         call gth_hsAddAttS(hf, NF90_GLOBAL, "Brdf_type", brdfType)
         call gth_hsAddAttS(hf, NF90_GLOBAL, "medium_filename", mediumFileName)
-        call gth_hsAddAttS(hf, NF90_GLOBAL, "medium_size_distribution", sDistribution)
         call gth_hsAddAttF(hf, NF90_GLOBAL, "Single_scattering_albedo", [w])
         call gth_hsAddAttF(hf, NF90_GLOBAL, "extinction_coefficient", [mu])
         call gth_hsAddAttF(hf, NF90_GLOBAL, "nMedia", [real(MF%nSelectedMedia,fd)])
