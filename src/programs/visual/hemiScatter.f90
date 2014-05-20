@@ -1,7 +1,7 @@
 !!--- BEGIN GPL --- 
 !!
-!! xrfpm -    a program to compute soft X-ray fluorescence of particulate media.
-!! Copyright (C) 2009 Hannu Parviainen
+!! hemiScatter
+!! Copyright (C) 2014 Olli Wilkman
 !!
 !! This program is part of UHOEM.
 !!
@@ -18,15 +18,15 @@
 !! You should have received a copy of the GNU General Public License
 !! along with this program.    If not, see <http://www.gnu.org/licenses/>.
 !!
-!! Contributor(s): Hannu Parviainen
+!! Contributor(s): Olli Wilkman
 !!
 !!--- END GPL ---
 
-!> Computes light scatterig from particulate media.
+!> Computes light scattering from particulate media.
 !!
-!! \author Hannu Parviainen
-!! \version 1.0
-!! \date 15.11.2007
+!! \author Olli Wilkman
+!! \version 0.1
+!! \date 20.5.2014
 
 program vScatter
     use iso_c_binding
@@ -53,15 +53,11 @@ program vScatter
     character (len=FNAME_LENGTH) :: hsPlotFilename       = ""
     character (len=FNAME_LENGTH) :: hsFilename           = "hemisphere.nc"
     character (len=FNAME_LENGTH) :: mediumFileName       = "medium.nc"
-    character (len=100)          :: sDistribution        = "constant"
     character (len=100)          :: brdfType             = "shadowing"
     character (len=100)          :: brdfPhaseFunction    = "constant"
 
     integer                      :: gridResHorizontal    = 200
     integer                      :: gridResVertical      = 10
-
-    real(fd)                     :: rho                  = 0.50_fd
-    real(fd)                     :: rhoAllowedError      = 0.05_fd
 
     integer                      :: resTheta            = 45
     integer                      :: sampleSeed           = 0
@@ -70,8 +66,6 @@ program vScatter
     integer                      :: nOrders              = 1
     character(len=100)           :: nSamplesPerOrder     = "1"
     integer, allocatable         :: nSamplesPerOrderTable(:)
-
-    real(fd), allocatable        :: thetaInTable(:)
 
     real(fd)                     :: mu                   = 1.0
     real(fd)                     :: w                    = 0.1
@@ -101,16 +95,18 @@ program vScatter
     real, dimension(:,:,:), allocatable :: mediumHeightMap
     real(fd), dimension(:,:,:), allocatable :: mediumDensityStructure
 
-    real(fd), external, pointer        :: Pf
+    real(fd), external, pointer :: Pf
+
+
+    real(fd) :: dTheta
 
     real    :: sTime, cTime, eTime
     integer :: i, iField
 
     namelist /params/ &
-             & resThetaE, gridResHorizontal, gridResVertical, &
+             & resTheta, gridResHorizontal, gridResVertical, &
              & hsCarPlotFilename, hsSphPlotFilename, hsFilename, mediumFilename, &
-             & sDistribution, rho, rhoAllowedError,    sampleSeed, &
-             & nThetaIn, thetaIn, &
+             & sDistribution, sampleSeed, &
              & nOrders, nSamplesPerOrder, &
              & mu, w, nPfParams, pfParams, &
              & brdfType, brdfPhaseFunction, &
@@ -148,12 +144,9 @@ program vScatter
     !!
     call rnd_init(sampleSeed, nThreads, .true.)
 
-    !! Read the angles of incidence into a table.
+    !! Generate the angles of incidence into a table.
     !!
-    allocate(thetaInTable(nThetaIn))
-    read(thetaIn,*) thetaInTable
- 
-    thetaInTable = CNV_DEGTORAD * thetaInTable
+    dTheta = HALF_PI/real(resTheta, fd)
 
     !! Read the number of samples for each scattering order into a table.
     !!
@@ -168,17 +161,12 @@ program vScatter
 
     !! Initialize hemisphere
     !!
-
-
-    call gth_hemisphere_init(H, resThetaE, nThetaIn, nOrders, GTH_TYPE_QS)
-
-
+    call gth_hemisphere_init(H, resTheta, resTheta, nOrders, GTH_TYPE_QS)
     write(H%name,'("Hemisphere")')
 
     !! Select the media for the simulation from a file.
     !!
     call med_mediumFileOpen(Mf, mediumFilename)
-    !!call med_mediumFileSelectMedia(Mf, rho, rhoAllowedError, sDistribution)
     call med_mediumFileSelectMedia(Mf)
 
     if(rf_applyFields) then
@@ -284,29 +272,27 @@ contains
         type(intersection_geometry) :: iSect
 
         real(fd), dimension(2,nSamples) :: samples
-        real(fd), dimension(3)          :: pSurface(3)!, pElement(3)
-        real(fd), dimension(3,nThetaIn) :: D
-        real(fd)                        :: dz, thtIn
+        real(fd), dimension(3)          :: pSurface(3)
+        real(fd), dimension(3) :: D
+        real(fd)                        :: dz, thetaIn, thetaInOffset
         integer :: i, j, k, iTheta
         logical :: pFound, pLit
 
         real :: tstRnd
-
-        D(1,:) = sin(thetaInTable)
-        D(2,:) = 0.0_fd
-        D(3,:) = cos(thetaInTable)
 
         call smpl_griddedSamples2D(samples, nSamples)
 
         samples = (samples * M%width - M%hWidth) * 0.5_fd
 
         ! $omp parallel default(none)                                 &
-        ! $omp shared(M, H, D, samples, f, w, Pf, Pp, nOrders, nSamplesPerOrderTable, nThetaIn, thetaInTable, timer) &
-        ! $omp private(rC, dz, thtIn, pSurface, i, j, k, iTheta, pFound, pLit, iSect, tstRnd)
+        ! $omp shared(M, H, D, samples, f, w, Pf, Pp, nOrders, nSamplesPerOrderTable, resTheta, thetaInTable, timer) &
+        ! $omp private(rC, dz, thetaIn, pSurface, i, j, k, iTheta, pFound, pLit, iSect, tstRnd)
  
         dz = M%grid%height - M%hMean - TRACE_EPS
 
         pSurface(3) = M%hMean
+        
+        D = 0.0_fd
 
         call ray_init(rC, RAY_TYPE_CAMERA)
 
@@ -319,6 +305,8 @@ contains
                     !! the mean medium surface.
                     !!
                     pSurface(1:2) = samples(:,i)
+                    call RANDOM_NUMBER(tstRnd)
+                    thetaInOffset = dTheta*tstRnd
 
                     pFound = .false.
                     do while (.not. pFound)            
@@ -357,8 +345,11 @@ contains
                         !! If an intersection is found, check if the point is shadowed.
                         !!
                         if(pFound) then
-                            do iTheta = 1, nThetaIn
-                                call trc_gatherRadiance(M%grid, rC%D, D(:,iTheta), iSect%P1 + TRACE_EPS * iSect%N, &
+                            do iTheta = 1, resTheta
+                                thetaIn = (iTheta-1)*dTheta + thetaInOffset
+                                D(1) = sin(thetaIn)
+                                D(3) = cos(thetaIn)
+                                call trc_gatherRadiance(M%grid, rC%D, D, iSect%P1 + TRACE_EPS * iSect%N, &
                                     & iSect%N, 1.0_fd / real(nSamplesPerOrderTable(1), fd), &
                                     & nSamplesPerOrderTable, nOrders, 1, H % data(iTheta, h%cIdx(j)+k-1,:), w, f, Pf, Pp)
                             end do
@@ -379,89 +370,6 @@ contains
 
 
 
-    subroutine sampleDiscrete(nSurfaceSamples, iTheta, iPhi, s)
-        integer :: nSurfaceSamples
-        real(fd), dimension(:) :: iTheta, iPhi, s
-        real(fd), dimension(size(iTheta)) :: sWeight
-
-        type(ray) :: rC
-        type(ray) :: rS
-        type(intersection_geometry) :: iSect
-
-        real(fd), dimension(2,nSurfaceSamples) :: samples
-        real(fd), dimension(3) :: pSurface
-        real(fd) :: dz, thtIn
-
-        integer :: nAngles, i, k
-        logical :: pFound, pLit
-
-
-        nAngles = size(iTheta)
-
-        call smpl_griddedSamples2D(samples, nSurfaceSamples)
-
-        samples = (samples * M%width - M%hWidth) * 0.5_fd
-        thtIn = thetaInTable(1)
-        rS%D = (/sin(thtIn), 0.0_fd, cos(thtIn)/)
-        dz = M%grid%height - M%hMean - TRACE_EPS
-
-        pSurface(3) = M%hMean
-
-        call ray_init(rC, RAY_TYPE_CAMERA)
-        call ray_init(rS, RAY_TYPE_SHADOW)
-
-        do k = 1, size(iTheta)
-            do i= 1, nSurfaceSamples
-
-                pSurface(1:2) = samples(:,i)
-
-                rC % D = (/sin(iTheta(k)) * cos(iPhi(k)), sin(iTheta(k)) * sin(iPhi(k)), cos(iTheta(k))/)
-
-                if(rC%D(3) < 1e-2_fd) then
-                    rC%D(3) = 1e-2
-                    call vec_normalize(rC%D)
-                end if
-
-                call rayToBBTop(rC, M, pSurface, dz)
-
-                pFound = trc_traceNearest(M%grid, rC, iSect)
-
-                if(pFound) then
-                    rS % P = iSect % P1 + TRACE_EPS * iSect % N
-                    rS % rayID = rS % rayID + RAY_ID_INCR
-
-                    pLit = .not. trc_traceOcclusion(M%grid, rS)
-
-                    ! $omp atomic
-                    sWeight(k) = sWeight(k) + 1.0_fd
-
-                    if(pLit) then
-                        ! $omp atomic
-                        s(k)    = s(k)    + 1.0_fd
-                    end if
-                end if
-            end do
-        end do
-
-        where(sWeight > 0) 
-            s = s / sWeight
-        end where
-    end subroutine sampleDiscrete
-
-
-
-    subroutine rayToBBTop(r, M, pSurface, dz)
-        type(ray)        :: r
-        type(med_medium) :: M
-        real(fd)         :: dz, pSurface(3)
-        r % P(1)  = pSurface(1) + dz * (r%D(1) / r%D(3))
-        r % P(2)  = pSurface(2) + dz * (r%D(2) / r%D(3))
-        r % P(3)  = M%grid%height - TRACE_EPS
-        r % P(1)  = modulo(r%P(1)+M%hWidth, M%width) - M%hWidth
-        r % P(2)  = modulo(r%P(2)+M%hWidth, M%width) - M%hWidth
-        r % rayID = r % rayID + RAY_ID_INCR
-        r % D     = - r % D
-    end subroutine rayToBBTop
 
     subroutine saveHemisphere(h, fName)
         type(gth_hemisphere), INTENT(IN) :: h
@@ -473,7 +381,7 @@ contains
         integer :: dimMedNum, dimMedMapRes, dimMedDenRes, idMedMap, idMedDen
 
         call gth_hsFileOpen(hf, fName, "w")
-        call gth_hsWriteHeader(hf, h, "Hannu Parviainen", "vScatter", "0.95")
+        call gth_hsWriteHeader(hf, h, "Olli Wilkman", "hemiScatter", "0.1")
  
         Call gth_nfCheck( nf90_def_dim(hf%fileID, "Number_of_media", MF%nSelectedMedia, dimMedNum))
         Call gth_nfCheck( nf90_def_dim(hf%fileID, "Medium_map_resolution", mediumMapRes, dimMedMapRes))
@@ -485,7 +393,6 @@ contains
         end if
 
         call gth_hsAddAttS(hf, NF90_GLOBAL, "Brdf_type", brdfType)
-        call gth_hsAddAttF(hf, NF90_GLOBAL, "Theta_in", thetaInTable)
         call gth_hsAddAttS(hf, NF90_GLOBAL, "medium_filename", mediumFileName)
         call gth_hsAddAttS(hf, NF90_GLOBAL, "medium_size_distribution", sDistribution)
         call gth_hsAddAttF(hf, NF90_GLOBAL, "Single_scattering_albedo", [w])
