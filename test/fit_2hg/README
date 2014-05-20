@@ -1,16 +1,5 @@
-== Testing fit_2hg
 
-After building and compiling fit_2hg, you can test it by running
+The fit_2hg program needs the geometry file for testing; this is currently not provided with this repository, hence there is also no test script. 
 
-$ ./../../bin/fit_2hg fit_2hg_test.in
+TODO: make a proper test
 
-This will read the input file fin_2hg_test.in and run the program
-using the medium file medium_rho_035.nc and the photometry file
-nadir_noise.nc in this directory, as well as some simple parameter
-values which should give a very short execution time.
-
-The program should produce a file called dscatter.scangles in
-this directory, containing the output.
-
-TODO: actually document what the program does, and what the input
-and output files contain.

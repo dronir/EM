@@ -7,11 +7,11 @@ mediumHeight   = 2.5
 resHorizontal  = 100
 resVertical    = 10
 
-mediumFileName = "medium_rho_035.nc"
+mediumFileName = "medium_test_constant.nc"
 mediumBaseName = "medUniform"
-sDistribution  = "uniform"
-sDistParams    = "0.005, 0.015"
+sDistribution  = "constant"
+sDistParams    = "0.010"
 
 nnDrops        = 1
-nDrops         = "5"
+nDrops         = "2"
 /

@@ -1,0 +1,17 @@
+&params
+nParticles     = 2000000
+
+mediumWidth    = 5.0
+mediumHeight   = 2.5
+
+resHorizontal  = 100
+resVertical    = 10
+
+mediumFileName = "medium_test_uniform.nc"
+mediumBaseName = "medUniform"
+sDistribution  = "uniform"
+sDistParams    = "0.005, 0.015"
+
+nnDrops        = 1
+nDrops         = "2"
+/
