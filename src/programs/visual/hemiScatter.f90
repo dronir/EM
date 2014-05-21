@@ -199,10 +199,6 @@ program vScatter
             call med_updateStatistics(M)
 
             if(rf_applyFields) then
-
-                !!- Smooth the medium surface: 
-                !!    Remove a constant percentage of the medium height from the top. 
-                !!
                 if(rf_spectrumType == 'constant') then
                     rndField%field = rf_P * M%height
                 else
@@ -211,13 +207,13 @@ program vScatter
                 end if
             end if
 
-            mediumHeightMap(i,:,:) = cnt_grid3D_cmpHeightMap(M%grid, mediumMapRes)
-            call med_computePorosityStructure(M, 5000, mediumDensityStructure(i,:,:))
+            if(saveMediumMap) then
+                mediumHeightMap(i,:,:) = cnt_grid3D_cmpHeightMap(M%grid, mediumMapRes)
+                call med_computePorosityStructure(M, 5000, mediumDensityStructure(i,:,:))
+            end if
 
             !call med_gridFit(M)
             !call med_updateStatistics(M)
-
-            !call utl_message("Beginning trace.")
  
             call cpu_time(sTime)
             
