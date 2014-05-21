@@ -11,13 +11,14 @@ nOrders           = 1
 nSamplesPerOrder  = "1000"
 
 saveMediumMap     = .false.
-rf_applyFields    = .false.
-rf_nFieldsPerMed  = 1
+rf_applyFields    = .true.
+rf_nFieldsPerMed  = 3
 rf_spectrumType   = "fBm"
 rf_P              = 0.6
 rf_std            = 0.06
 
 w                 = 0.1
 
-brdfType          = "Lambert"
+brdfType          = "LommelSeeliger"
+brdfPhaseFunction = "constant"
 /
