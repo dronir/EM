@@ -43,7 +43,7 @@ subroutine simulation_method_analytic(mat, med, spc, nPosSamples, inTheta, emThe
   use particle
   use bfdf
   use medium
-  use trace
+  use trace_xr
   use sampler
 
   implicit none

@@ -47,7 +47,7 @@ subroutine simulation_method_firstorder(mat, med, spc, nPosSamples, nSrcSamples,
   use hemisphere
   use random
   use medium
-  use trace
+  use trace_xr
   use sampler
   !$ use omp_lib
 

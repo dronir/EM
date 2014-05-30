@@ -7,7 +7,7 @@
     use random
     use medium
     use rfield
-    use trace
+    use trace_xr
     use sampler
 
     type(mat_material)     :: mat
