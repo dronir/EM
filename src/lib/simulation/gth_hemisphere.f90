@@ -241,13 +241,16 @@ Contains
     Integer,              Intent(IN) :: t, p
 
     Real(FD)                         :: d(3)
-    Real(FD)                         :: theta, phi
+    Real(FD)                         :: theta, phi, ca, cb
     
     real(FD)                         :: r(2)
 
     Call Random_number(r)
 
-    theta = (Real(t,fd) - r(1)) * h % dTheta
+    ca = cos(real(t-1,fd) * h%dTheta)
+    cb = cos(real(t,fd) * h%dTheta)
+
+    theta = acos(ca - r(1)*(ca - cb))
     phi   = (Real(p,fd) - r(2)) * h % dPhi(t)
     
     d(1) = Sin(theta) * Cos(phi);
