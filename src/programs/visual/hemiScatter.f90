@@ -270,7 +270,7 @@ contains
         real(fd), dimension(2,nSamples) :: samples
         real(fd), dimension(3)          :: pSurface(3)
         real(fd), dimension(3) :: D
-        real(fd)                        :: dz, thetaIn, thetaInOffset
+        real(fd)                        :: dz, thetaIn, thetaInOffset, phiOffset, x, y
         integer :: i, j, k, iTheta
         logical :: pFound, pLit
 
@@ -289,6 +289,7 @@ contains
         pSurface(3) = M%hMean
         
         D = 0.0_fd
+        PhiOffset = 0.0_fd
 
         call ray_init(rC, RAY_TYPE_CAMERA)
 
@@ -302,7 +303,9 @@ contains
                     !!
                     pSurface(1:2) = samples(:,i)
                     call RANDOM_NUMBER(tstRnd)
+                    call RANDOM_NUMBER(phiOffset)
                     thetaInOffset = dTheta*tstRnd
+                    phiOffset = phiOffset * TWO_PI
 
                     pFound = .false.
                     do while (.not. pFound)            
@@ -315,6 +318,12 @@ contains
                             call RANDOM_NUMBER(tstRnd)
                             if(tstRnd > 0.5) rC%D(2) = -rC%D(2)
                         end if
+
+                        ! Rotate ray here
+                        x = rC%D(1)
+                        y = rC%D(2)
+                        rC%D(1) = x*cos(phiOffset) - y*sin(phiOffset)
+                        rC%D(2) = x*sin(phiOffset) + y*cos(phiOffset)
 
                         if(rC%D(3) < 1e-2_fd) then
                              rC%D(3) = 1e-2
@@ -343,7 +352,8 @@ contains
                         if(pFound) then
                             do iTheta = 1, resTheta
                                 thetaIn = (iTheta-1)*dTheta + thetaInOffset
-                                D(1) = sin(thetaIn)
+                                D(1) = sin(thetaIn)*cos(phiOffset)
+                                D(2) = sin(thetaIn)*sin(phiOffset)
                                 D(3) = cos(thetaIn)
                                 call trc_gatherRadiance(M%grid, rC%D, D, iSect%P1 + TRACE_EPS * iSect%N, &
                                     & iSect%N, 1.0_fd / real(nSamplesPerOrderTable(1), fd), &
