@@ -397,8 +397,8 @@ contains
         if(rf_applyfields) then
             call gth_hsAddAttS(hf, NF90_GLOBAL, "srfType", rf_spectrumType)
             call gth_hsAddAttF(hf, NF90_GLOBAL, "nFields", [real(rf_nFieldsPerMed,fd)])
-            call gth_hsAddAttF(hf, NF90_GLOBAL, "srfStd", [rf_P])
-            call gth_hsAddAttF(hf, NF90_GLOBAL, "srfRoughP", [rf_std])
+            call gth_hsAddAttF(hf, NF90_GLOBAL, "srfStd", [rf_std])
+            call gth_hsAddAttF(hf, NF90_GLOBAL, "srfRoughP", [rf_P])
         end if
 
         call gth_hsSaveData(h, hf)
