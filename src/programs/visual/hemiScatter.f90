@@ -268,13 +268,11 @@ contains
         type(intersection_geometry) :: iSect
 
         real(fd), dimension(2,nSamples) :: samples
-        real(fd), dimension(3)          :: pSurface(3)
-        real(fd), dimension(3) :: D
+        real(fd), dimension(2)          :: pSurface(2)
+        real(fd), dimension(3)          :: D
         real(fd)                        :: dz, thetaIn, thetaInOffset, phiOffset, x, y
-        integer :: i, j, k, iTheta
+        integer :: t,p,j,n
         logical :: pFound, pLit
-
-        real :: tstRnd
 
         call smpl_griddedSamples2D(samples, nSamples)
 
@@ -285,8 +283,6 @@ contains
         ! $omp private(rC, dz, thetaIn, pSurface, i, j, k, iTheta, pFound, pLit, iSect, tstRnd)
  
         dz = M%grid%height - M%hMean - TRACE_EPS
-
-        pSurface(3) = M%hMean
         
         D = 0.0_fd
         PhiOffset = 0.0_fd
@@ -294,17 +290,16 @@ contains
         call ray_init(rC, RAY_TYPE_CAMERA)
 
         ! $omp do schedule(dynamic) 
-        do j = 1, H % resTheta
-            do k = 1, H % resPhi(j)
+        do t = 1, H % resTheta
+            do p = 1, H % resPhi(t)
                 ! $omp do schedule(dynamic) 
-                do i= 1, nSamplesPerOrderTable(1)
+                do n = 1, nSamplesPerOrderTable(1)
                     !! Select the sample point of the incident camera ray from
                     !! the mean medium surface.
                     !!
-                    pSurface(1:2) = samples(:,i)
-                    call RANDOM_NUMBER(tstRnd)
+                    pSurface(1:2) = samples(:,n)
+
                     call RANDOM_NUMBER(phiOffset)
-                    thetaInOffset = dTheta*tstRnd
                     phiOffset = phiOffset * TWO_PI
 
                     pFound = .false.
@@ -312,7 +307,7 @@ contains
                         !! Find the intersection of the camera ray and the top of 
                         !! the bounding box of the periodic medium.
                         !!
-                        rC%D = gth_cellRandomSampleCar(H, j, k)
+                        rC%D = gth_cellRandomSampleCar(H, t, p)
 
                         if(h%type == GTH_TYPE_QS) then
                             call RANDOM_NUMBER(tstRnd)
@@ -350,14 +345,15 @@ contains
                         !! If an intersection is found, check if the point is shadowed.
                         !!
                         if(pFound) then
-                            do iTheta = 1, resTheta
-                                thetaIn = (iTheta-1)*dTheta + thetaInOffset
+                            do j = 1, resTheta
+			                    call RANDOM_NUMBER(thetaInOffset)
+                                thetaIn = (j-thetaInOffset)*dTheta
                                 D(1) = sin(thetaIn)*cos(phiOffset)
                                 D(2) = sin(thetaIn)*sin(phiOffset)
                                 D(3) = cos(thetaIn)
                                 call trc_gatherRadiance(M%grid, rC%D, D, iSect%P1 + TRACE_EPS * iSect%N, &
                                     & iSect%N, 1.0_fd / real(nSamplesPerOrderTable(1), fd), &
-                                    & nSamplesPerOrderTable, nOrders, 1, H % data(iTheta, h%cIdx(j)+k-1,:), w, f, Pf, Pp)
+                                    & nSamplesPerOrderTable, nOrders, 1, H % data(j, h%cIdx(t)+p-1,:), w, f, Pf, Pp)
                             end do
                         else
                             call rnd_generate_uniform(0.0_fd, 1.0_fd, pSurface(1:2))
