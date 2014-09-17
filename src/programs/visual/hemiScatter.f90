@@ -309,10 +309,10 @@ contains
                         !!
                         rC%D = gth_cellRandomSampleCar(H, t, p)
 
-                        if(h%type == GTH_TYPE_QS) then
-                            call RANDOM_NUMBER(tstRnd)
-                            if(tstRnd > 0.5) rC%D(2) = -rC%D(2)
-                        end if
+                        !if(h%type == GTH_TYPE_QS) then
+                        !    call RANDOM_NUMBER(tstRnd)
+                        !    if(tstRnd > 0.5) rC%D(2) = -rC%D(2)
+                        !end if
 
                         ! Rotate ray here
                         x = rC%D(1)
