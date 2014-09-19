@@ -212,8 +212,8 @@ program vScatter
                 call med_computePorosityStructure(M, 5000, mediumDensityStructure(i,:,:))
             end if
 
-            !call med_gridFit(M)
-            !call med_updateStatistics(M)
+            call med_gridFit(M)
+            call med_updateStatistics(M)
  
             call cpu_time(sTime)
             
