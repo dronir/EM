@@ -336,7 +336,7 @@ contains
 
                         !! Negate the ray.
                         !!
-                        rC % D = - rC%D
+                        rC % D = -rC%D
 
                         !! Find the true intersection point of the camera ray and medium.
                         !!
