@@ -321,11 +321,13 @@ contains
     do i = 1, c % nParts
        pp = c%parts(i)%P
 
-       la(1:2) = floor((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw) + 1
-       lb(1:2) = floor((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw) + 1
+       la(1:2) = floor((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw)
+       lb(1:2) = floor((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw)
 
-       where(la < 1)        la = 1
-       where(lb > c%res_xy) lb = c%res_xy
+	   la = modulo(la, c%res_xy) + 1
+	   lb = modulo(lb, c%res_xy) + 1
+!       where(la < 1)        la = 1
+!       where(lb > c%res_xy) lb = c%res_xy
 
        la(3) = floor((pp(3) - c%parts(i) % r) * c % rh) + 1
        lb(3) = floor((pp(3) + c%parts(i) % r) * c % rh) + 1
