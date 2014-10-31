@@ -3,6 +3,8 @@ include(CheckLibraryExists)
 
 project(PSR_EM Fortran C)
 
+set(CMAKE_BUILD_TYPE RELEASE)
+
 if(NOT UNIX)
   message(FATAL_ERROR "Sorry, only Unix systems supported at the moment.")
 endif()
@@ -156,8 +158,8 @@ endif()
 if(${CMAKE_COMPILER_IS_GNUG77})
   add_definitions("-ffree-line-length-none")
 
-  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} " CACHE STRING "")
-  set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -march=native -combine -ftree-vectorize -finline-functions" CACHE STRING "")
+  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}" CACHE STRING "")
+  set(CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -O3 -march=native -combine -ftree-vectorize -finline-functions" CACHE STRING "")
    
   if(WITH_OPENMP)
     add_definitions("-fopenmp")
