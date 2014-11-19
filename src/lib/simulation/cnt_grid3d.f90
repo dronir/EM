@@ -226,42 +226,49 @@ contains
   !!   \param        lb 
   !!
   !! SOURCE
-  subroutine cnt_grid3D_addParticleToCells(c, si, la, lb)
-    type(cnt_grid3D) :: c    
-    integer :: si, x, y, z
-    integer, dimension(:), pointer :: tmp
-    integer, dimension(3) :: la, lb
-    
+subroutine cnt_grid3D_addParticleToCells(c, si, lx, ly, lz)
+	type(cnt_grid3D) :: c    
+	integer :: si, x, y, z, i, j, k
+	integer, dimension(:), pointer :: tmp
+	integer, dimension(2) :: lx, ly, lz
 
-    do z = la(3), lb(3)
-       do y = la(2), lb(2)
-          do x = la(1), lb(1)
+	z = -1
+	do k = 1,2
+		y = -1
+		if(z == lz(k)) continue
+		z = lz(k)
+       	do j = 1,2
+			x = -1
+			if(y == ly(j)) continue
+			y = ly(j)
+        	do i = 1,2
+				if(x == lx(i)) continue
+            	x = lx(i)
+            	!! Manual reallocation of the data array if the array is full.
+            	!!
+				if(c % grid(x,y,z) % nParts == c % grid(x,y,z) % lsize) then
+					tmp => c % grid(x,y,z) % plist
+					allocate(c % grid(x,y,z) % plist(c % grid(x,y,z) % lsize + pmin))
+					c % grid(x,y,z) % plist(:c % grid(x,y,z) % nParts) = tmp
+					deallocate(tmp)
+					c % grid(x,y,z) % lsize = c % grid(x,y,z) % lsize + pmin
+				end if
+            	
+				!! Add the sphere index to the array.
+				!!
+				c % grid(x,y,z) % plist(c % grid(x,y,z) % nParts + 1) = si
+				c % grid(x,y,z) % nParts = c % grid(x,y,z) % nParts + 1
+            	
+				if(z > c % maxHeight_l(x,y)) c % maxHeight_l(x,y) = z
+            	
+				tmp => null()
+			end do
+		end do
 
-             !! Manual reallocation of the data array if the array is full.
-             !!
-             if(c % grid(x,y,z) % nParts == c % grid(x,y,z) % lsize) then
-                tmp => c % grid(x,y,z) % plist
-                allocate(c % grid(x,y,z) % plist(c % grid(x,y,z) % lsize + pmin))
-                c % grid(x,y,z) % plist(:c % grid(x,y,z) % nParts) = tmp
-                deallocate(tmp)
-                c % grid(x,y,z) % lsize = c % grid(x,y,z) % lsize + pmin
-             end if
+		if(z > c % maxHeight_g) c % maxHeight_g = z
 
-             !! Add the sphere index to the array.
-             !!
-             c % grid(x,y,z) % plist(c % grid(x,y,z) % nParts + 1) = si
-             c % grid(x,y,z) % nParts = c % grid(x,y,z) % nParts + 1
-
-             if(z > c % maxHeight_l(x,y)) c % maxHeight_l(x,y) = z
-
-             tmp => null()
-          end do
-       end do
-
-       if(z > c % maxHeight_g) c % maxHeight_g = z
-
-    end do
-  end subroutine cnt_grid3D_addParticleToCells
+	end do
+end subroutine cnt_grid3D_addParticleToCells
   !******
 
 
@@ -276,70 +283,76 @@ contains
   !   c          : cnt_grid3D  ... Container
   !
   ! SOURCE
-  subroutine cnt_grid3D_optimizeGrid(c, verbose)
-    type(cnt_grid3D) :: c
-    logical, optional :: verbose
+subroutine cnt_grid3D_optimizeGrid(c, verbose)
+	type(cnt_grid3D) :: c
+	logical, optional :: verbose
 
-    real(FD) :: minX, maxX, minY, maxY, pp(3)
-    integer :: i, x, y, z, la(3), lb(3)
+	real(FD) :: minX, maxX, minY, maxY, pp(3)
+	integer :: i, x, y, z, lx(2), ly(2), lz(2), la(3), lb(3)
 
-    logical v
+	logical v
 
-    v = .false.
+	v = .false.
 
-    if(present(verbose)) v = verbose
+	if(present(verbose)) v = verbose
 
-    if(v) write(*,*) "Recalculating world bounds and optimizing grid."
+	if(v) write(*,*) "Recalculating world bounds and optimizing grid."
 
-    maxX = abs(maxval(c % parts(:) % P(1) + c % parts(:) % r))
-    minX = abs(minval(c % parts(:) % P(1) - c % parts(:) % r))
-    maxY = abs(maxval(c % parts(:) % P(2) + c % parts(:) % r))
-    minY = abs(minval(c % parts(:) % P(2) - c % parts(:) % r))
+	maxX = abs(maxval(c % parts(:) % P(1) + c % parts(:) % r))
+	minX = abs(minval(c % parts(:) % P(1) - c % parts(:) % r))
+	maxY = abs(maxval(c % parts(:) % P(2) + c % parts(:) % r))
+	minY = abs(minval(c % parts(:) % P(2) - c % parts(:) % r))
 
-    c % width  = 2.0_fd * (maxval((/maxX, minX, maxY, minY/)) + CNT_BORDER)
-    c % hWidth = c % width * 0.5
-    c % rw     = real(c%res_xy) / c%width
-    c % wr     = c%width / real(c%res_xy)
+	c % width  = 2.0_fd * (maxval((/maxX, minX, maxY, minY/)) + CNT_BORDER)
+	c % hWidth = c % width * 0.5
+	c % rw     = real(c%res_xy) / c%width
+	c % wr     = c%width / real(c%res_xy)
 
-    c % height = maxval(c % parts(:) % P(3) + c % parts(:) % r) + CNT_BORDER
-    c % rh     = real(c%res_z) / c%height
-    c % hr     = c%height / real(c%res_z)
+	c % height = maxval(c % parts(:) % P(3) + c % parts(:) % r) + CNT_BORDER
+	c % rh     = real(c%res_z) / c%height
+	c % hr     = c%height / real(c%res_z)
 
-    c % grid % nParts = 0
-    c % grid % lsize   = pMin
+	c % grid % nParts = 0
+	c % grid % lsize   = pMin
 
-    do z = 1, c % res_z
-       do y = 1, c % res_xy
-          do x = 1, c % res_xy
-             deallocate(c % grid(x,y,z) % plist)
-             allocate(c % grid(x,y,z) % plist(pMin))
-             c % grid(x,y,z) % plist = 0
-          end do
-       end do
-    end do
+	do z = 1, c % res_z
+		do y = 1, c % res_xy
+			do x = 1, c % res_xy
+				deallocate(c % grid(x,y,z) % plist)
+				allocate(c % grid(x,y,z) % plist(pMin))
+				c % grid(x,y,z) % plist = 0
+			end do
+		end do
+	end do
 
-    do i = 1, c % nParts
-       pp = c%parts(i)%P
+	do i = 1, c % nParts
+		pp = c%parts(i)%P
 
-       la(1:2) = floor((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw) + 1
-       lb(1:2) = floor((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw) + 1
+		la(1:2) = floor((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw) + 1
+		lb(1:2) = floor((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw) + 1
 
-       where(la < 1)        la = 1
-       where(lb > c%res_xy) lb = c%res_xy
+		where(la < 1)        la = c%res_xy
+		where(lb > c%res_xy) lb = 1
 
-       la(3) = floor((pp(3) - c%parts(i) % r) * c % rh) + 1
-       lb(3) = floor((pp(3) + c%parts(i) % r) * c % rh) + 1
+		la(3) = floor((pp(3) - c%parts(i) % r) * c % rh) + 1
+		lb(3) = floor((pp(3) + c%parts(i) % r) * c % rh) + 1
 
-       if(la(3) < 1) la(3) = 1
-       if(la(3) > c%res_z) la(3) = c%res_z
+		if(la(3) < 1) la(3) = 1
+		if(la(3) > c%res_z) la(3) = c%res_z
 
-       if(lb(3) > c%res_z) lb(3) = c%res_z
+		if(lb(3) > c%res_z) lb(3) = c%res_z
 
-       call cnt_grid3D_addParticleToCells(c, i, la, lb)
-    end do
+		lx(1) = la(1)
+	   	lx(2) = lb(1)
+	   	ly(1) = la(2)
+	   	ly(2) = lb(2)
+	   	lz(1) = la(3)
+	   	lz(2) = lb(3)
+	    call cnt_grid3D_addParticleToCells(c, i, lx, ly, lz)
+	end do
 
-    if(v) write(*,*) "Done."
-  end subroutine cnt_grid3D_optimizeGrid
+	if(v) write(*,*) "Done."
+end subroutine cnt_grid3D_optimizeGrid
   !******
 
 
@@ -452,6 +465,7 @@ contains
 
     integer,  dimension(2, nDrops)  :: lim2D_a, lim2D_b
     integer,  dimension(3)          :: lim3D_a, lim3D_b
+	integer,  dimension(2)          :: lx, ly, lz
     integer                         :: iDrop, iMinHeight(1)
 
     real(FD), dimension(nDrops)     :: height
@@ -514,7 +528,14 @@ contains
 
     if(lim3D_b(3) > c%res_z) lim3D_b(3) = c%res_z
 
-    call cnt_grid3D_addParticleToCells(c, sI, lim3D_a, lim3D_b)
+
+	lx(1) = lim3D_a(1)
+   	lx(2) = lim3D_b(1)
+   	ly(1) = lim3D_a(2)
+   	ly(2) = lim3D_b(2)
+   	lz(1) = lim3D_a(3)
+   	lz(2) = lim3D_b(3)
+    call cnt_grid3D_addParticleToCells(c, sI, lx, ly, lz)
 
     cnt_grid3D_dropParticle = 1
 
