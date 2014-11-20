@@ -234,15 +234,15 @@ subroutine cnt_grid3D_addParticleToCells(c, si, lx, ly, lz)
 
 	z = -1
 	do k = 1,2
-		y = -1
-		if(z == lz(k)) continue
+		if(z == lz(k)) cycle
 		z = lz(k)
+		y = -1
        	do j = 1,2
-			x = -1
-			if(y == ly(j)) continue
+			if(y == ly(j)) cycle
 			y = ly(j)
+			x = -1
         	do i = 1,2
-				if(x == lx(i)) continue
+				if(x == lx(i)) cycle
             	x = lx(i)
             	!! Manual reallocation of the data array if the array is full.
             	!!
@@ -485,8 +485,8 @@ end subroutine cnt_grid3D_optimizeGrid
     lim2D_b = floor((p + cPa%r + c%hwidth) * c%rw) + 1
 
 
-    where(lim2D_a < 1)        lim2D_a = 1
-    where(lim2D_b > c%res_xy) lim2D_b = c%res_xy
+    where(lim2D_a < 1)        lim2D_a = c%res_xy
+    where(lim2D_b > c%res_xy) lim2D_b = 1
 
     height = 0.0
 
