@@ -186,8 +186,10 @@ program vScatter
     !! RUN SIMULATION
     !!
 
-    allocate(mediumHeightMap(MF%nSelectedMedia, mediumMapRes, mediumMapRes))
-    allocate(mediumDensityStructure(MF%nSelectedMedia, mediumDensitymapRes, 2))
+	if(saveMediumMap) then
+		allocate(mediumHeightMap(MF%nSelectedMedia, mediumMapRes, mediumMapRes))
+    	allocate(mediumDensityStructure(MF%nSelectedMedia, mediumDensitymapRes, 2))
+	end if
 
     call utl_message("BRDF type used: " // brdfType)
 
@@ -203,8 +205,8 @@ program vScatter
                     rndField%field = rf_P * M%height
                 else
                     call rf_generateField(rndField, iField)
-                    call med_maskHeight(m, real(rndField%field, fs))
                 end if
+				call med_maskHeight(m, real(rndField%field, fs))
             end if
 
             if(saveMediumMap) then
@@ -325,12 +327,16 @@ contains
                              call vec_normalize(rC%D)
                         end if
 
-                        rC % P(1)  = pSurface(1) + dz * (rC%D(1) / rC%D(3))
-                        rC % P(2)  = pSurface(2) + dz * (rC%D(2) / rC%D(3))
+                        !rC % P(1)  = pSurface(1) + dz * (rC%D(1) / rC%D(3))
+                        !rC % P(2)  = pSurface(2) + dz * (rC%D(2) / rC%D(3))
+                        !rC % P(3)  = M%grid%height - TRACE_EPS
+						
+                        rC % P(1)  = pSurface(1) !+ dz * (rC%D(1) / rC%D(3))
+                        rC % P(2)  = pSurface(2) !+ dz * (rC%D(2) / rC%D(3))
                         rC % P(3)  = M%grid%height - TRACE_EPS
                                     
-                        rC % P(1)  = modulo(rC%P(1)+M%hWidth, M%width) - M%hWidth
-                        rC % P(2)  = modulo(rC%P(2)+M%hWidth, M%width) - M%hWidth
+                        !rC % P(1)  = modulo(rC%P(1)+M%hWidth, M%width) - M%hWidth
+                        !rC % P(2)  = modulo(rC%P(2)+M%hWidth, M%width) - M%hWidth
                                     
                         rC % rayID = rC%rayID + RAY_ID_INCR
 
