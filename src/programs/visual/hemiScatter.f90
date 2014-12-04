@@ -195,8 +195,8 @@ program vScatter
 
     do i = 1, MF%nSelectedMedia
         do iField = 1, rf_nFieldsPerMed
-            call med_mediumFileRead(M, Mf, Mf%varSelection(i))
-            call med_gridAssign(M, gridResHorizontal, gridResVertical)
+	        call med_mediumFileRead(M, Mf, Mf%varSelection(i))
+	        call med_gridAssign(M, gridResHorizontal, gridResVertical)            
             call med_gridFit(M)
             call med_updateStatistics(M)
 
@@ -213,9 +213,6 @@ program vScatter
                 mediumHeightMap(i,:,:) = cnt_grid3D_cmpHeightMap(M%grid, mediumMapRes)
                 call med_computePorosityStructure(M, 5000, mediumDensityStructure(i,:,:))
             end if
-
-            call med_gridFit(M)
-            call med_updateStatistics(M)
  
             call cpu_time(sTime)
             
