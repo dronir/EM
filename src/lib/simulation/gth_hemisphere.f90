@@ -58,6 +58,7 @@ Type :: gth_hemisphere
       Real    (FD), Dimension(:),     Pointer :: dPhi, dPhiInv, dA, mTheta
       Integer (IL), Dimension(:),     Pointer :: resPhi, cIdx
 
+	  Integer (IL), Dimension(:), Pointer :: transmit
       Real    (FD), Dimension(:,:,:), Pointer :: data
       Real    (FD), Dimension(:,:,:), Pointer :: weight
 End Type gth_hemisphere
@@ -149,9 +150,11 @@ Subroutine gth_hemisphere_init(h, resTheta, nThetaI_, nDataLevels_, type_)
 
     h % dAMean = phiRange / Real(h%nCells, fd)
 
+	allocate( h % transmit   ( h%nCells ) )
     allocate( h % data   ( nThetaI, h%nCells, nDataLevels ) )
     allocate( h % weight ( nThetaI, h%nCells, nDataLevels ) )
 
+	h % transmit = 0
     h % data   = 0.0_fd
     h % weight = 0.0_fd
 End Subroutine gth_hemisphere_init
@@ -477,6 +480,7 @@ integer function gth_writeNetcdfHeader(h, fileID) result(dataID)
     else
           call utl_fatal_error("Fatal error: unknown gather type.")
     end if
+
 
     Call gth_nfCheck( nf90_put_att(fileID, dataID, "long_name",  "hemisphere data" ) )
 
