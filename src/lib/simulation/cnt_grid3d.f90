@@ -807,6 +807,9 @@ contains
     pos_g(1)   = floor((pos_r(1) + c%hwidth) * c%rw) + 1
     pos_g(2)   = floor((pos_r(2) + c%hwidth) * c%rw) + 1
     pos_g(3)   = floor((pos_r(3) ) * c%rh) + 1
+	pos_g(1) = max(min(pos_g(1), c%res_xy), 1)
+	pos_g(2) = max(min(pos_g(2), c%res_xy), 1)
+	pos_g(3) = max(min(pos_g(3), c%res_z), 1)
 
   end function cnt_grid3D_quantizePosition
   !******

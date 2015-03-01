@@ -302,7 +302,7 @@ contains
                     phiOffset = phiOffset * TWO_PI
 
                     pFound = .false.
-                    do while (.not. pFound)            
+ 
                         !! Find the intersection of the camera ray and the top of 
                         !! the bounding box of the periodic medium.
                         !!
@@ -359,10 +359,9 @@ contains
                                     & nSamplesPerOrderTable, nOrders, 1, H % data(j, h%cIdx(t)+p-1,:), w, f, Pf, Pp)
                             end do
                         else
-                            call rnd_generate_uniform(0.0_fd, 1.0_fd, pSurface(1:2))
-                            pSurface(1:2) = (pSurface(1:2) * M%width - M%hWidth) * 0.5_fd
+                            H%transmit(H%cIdx(t)+p-1) = H%transmit(H%cIdx(t)+p-1) + 1
                         end if
-                    end do
+
                 end do
                 ! $omp end do
                 call utl_timerIncrease(timer)    
@@ -381,16 +380,17 @@ contains
         character (len = *) :: fName
 
         type(gth_hsFile) :: hf
-        integer :: i
+        integer :: i, transmitID
 
         integer :: dimMedNum, dimMedMapRes, dimMedDenRes, idMedMap, idMedDen
 
         call gth_hsFileOpen(hf, fName, "w")
         call gth_hsWriteHeader(hf, h, "Olli Wilkman", "hemiScatter", "0.1")
- 
+
         Call gth_nfCheck( nf90_def_dim(hf%fileID, "Number_of_media", MF%nSelectedMedia, dimMedNum))
         Call gth_nfCheck( nf90_def_dim(hf%fileID, "Medium_map_resolution", mediumMapRes, dimMedMapRes))
         Call gth_nfCheck( nf90_def_dim(hf%fileID, "Medium_densitymap_resolution", mediumDensitymapRes, dimMedDenRes))
+		Call gth_nfCheck( nf90_def_var(hf%fileID, "Transmit", NF90_INT, [hf%dimHs(2)], transmitID) )
 
         if(saveMediumMap) then
             Call gth_nfCheck( nf90_def_var(hf%fileID, "Medium_heightmap", NF90_FLOAT, [dimMedNum,dimMedMapRes,dimMedMapRes], idMedMap) )
@@ -411,6 +411,8 @@ contains
         end if
 
         call gth_hsSaveData(h, hf)
+		
+		Call gth_nfCheck( nf90_put_var(hf%fileID, transmitID, h%transmit) )
 
         if(saveMediumMap) then
             Call gth_nfCheck( nf90_put_var(hf%fileID, idMedMap, mediumHeightMap))
