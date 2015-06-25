@@ -12,9 +12,9 @@
 #error When using an Intel Fortran Compiler, make sure it is at least version 10.0
 #elif defined(__G95__)
 #warning Using the G95 compiler
-#elif defined(__GFORTRAN__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 3
+#elif defined(__GFORTRAN__) && __GNUC__ >= 4
 #warning Using a valid GFortran Compiler
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ < 3
 #error Version of GFortran must be at least 4.3.0
 #else
 #warning Using an unknown compiler, may not compile/run correctly
