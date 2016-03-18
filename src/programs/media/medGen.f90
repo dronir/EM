@@ -161,10 +161,15 @@ program medgen
         write(*,'("Using uniform particle size distribution.")')
         read(sDistParams,*)  sDistParArr(1:2)
         call med_setDistribution_uniform(M, sDistParArr(1), sDistParArr(2), distSeed)
+    case('lognormal')
+       write(*,'("Using log-normal particle size distribution.")')
+       read(sDistParams,*)  sDistParArr(1:2)
+       call med_setDistribution_logNormal(M, sDistParArr(1), sDistParArr(2), distSeed)
      case default
         write(*,'("Error: Unsupported particle size distribution. Exiting.")')
         stop
   end select
+  
   !!
   !!- initialise timer
   !!

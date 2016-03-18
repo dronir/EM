@@ -373,15 +373,16 @@ contains
 !!$
 !!$    m % parts(:) % r  = rTemp
 !!$    m % parts(:) % rr = m % parts % r ** 2
-!!$
+!!$for
 !!$    write(m % pDistribution, '("invGamma")')
 
   end subroutine med_setDistribution_invGamma
 
-  subroutine med_setDistribution_logNormal(m, mean, std)
+  subroutine med_setDistribution_logNormal(m, mean, std, seed)
     type(med_medium) :: m
     real(FD) :: mean, std
     real(FD) :: rTemp(m%nParts)
+    integer, optional :: seed
 
     call rnd_generate_logNormal(mean, std, rTemp)
 
@@ -389,6 +390,7 @@ contains
     m % parts(:) % rr = m % parts % r ** 2
 
     write(m % pDistribution, '("logNormal")')
+    write(m % pDistParms,    '(2(E15.7))') mean, std
 
   end subroutine med_setDistribution_logNormal
 
