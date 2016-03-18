@@ -640,7 +640,7 @@ contains
     type(med_medium)     :: m
     real, dimension(:,:) :: hmap
 
-    real(fd)             :: rw
+    real(fd)             :: rw, mean, std
     integer              :: p(2)
     integer              :: i, j
     integer              :: nNew
@@ -649,9 +649,23 @@ contains
     type(prt_sphere), dimension(:), pointer :: pTemp
     logical, dimension(m%nParts)            :: pMask
     
+    write(*,*) "Medium width", m%width
+    write(*,*) "Medium max height", m%height
+    hmap = hmap - maxval(hmap)
+    mean = sum(hmap) / size(hmap)
+    std = sqrt(sum((hmap - mean)**2) / size(hmap))
+    
     pMask = .true.
     rw = real(size(hmap,1))/m%width
-    hmap = hmap + m%height - maxval(hmap)
+    hmap = hmap + m%height
+    write(*,*) "Height map max   ", maxval(hmap)
+    write(*,*) "Height map min   ", minval(hmap)
+    write(*,*) "Height map ampl. ", maxval(hmap)-minval(hmap)
+    
+    write(*,*) "Height map mean  ", mean
+    write(*,*) "Height map std   ", std
+    write(*,*) "Height map size  ", size(hmap)
+    
 
     do i=1,m%nParts
        p = floor((m % parts(i) % P(1:2) + m % hwidth) * rw) + 1
