@@ -1,0 +1,24 @@
+&params
+mediumFileName    = "../medgen/medium_test_uniform.nc"
+hsFilename        = "hemisphere_nomap.nc"
+resTheta          = 45
+gridResHorizontal = 400
+gridResVertical   = 10
+
+sampleSeed        = 3
+
+nOrders           = 1
+nSamplesPerOrder  = "1000"
+
+saveMediumMap     = .false.
+rf_applyFields    = .true.
+rf_nFieldsPerMed  = 3
+rf_spectrumType   = "fBm"
+rf_P              = 0.6
+rf_std            = 0.06
+
+w                 = 0.1
+
+brdfType          = "LommelSeeliger"
+brdfPhaseFunction = "constant"
+/

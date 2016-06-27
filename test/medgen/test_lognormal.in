@@ -1,0 +1,17 @@
+&params
+nParticles     = 2000000
+
+mediumWidth    = 5.0
+mediumHeight   = 2.5
+
+resHorizontal  = 100
+resVertical    = 10
+
+mediumFileName = "medium_test_lognormal.nc"
+mediumBaseName = "medLognormal"
+sDistribution  = "lognormal"
+sDistParams    = "-5.11, 0.5"
+
+nnDrops        = 1
+nDrops         = "2"
+/

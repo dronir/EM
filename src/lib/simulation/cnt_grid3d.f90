@@ -228,15 +228,18 @@ contains
   !! SOURCE
   subroutine cnt_grid3D_addParticleToCells(c, si, la, lb)
     type(cnt_grid3D) :: c    
-    integer :: si, x, y, z
+    integer :: si, x, y, z, i, j, k
     integer, dimension(:), pointer :: tmp
     integer, dimension(3) :: la, lb
-    
 
-    do z = la(3), lb(3)
-       do y = la(2), lb(2)
-          do x = la(1), lb(1)
 
+
+    do k = la(3), lb(3)
+		z = modulo(k-1, c%res_xy) + 1
+       do j = la(2), lb(2)
+		   y = modulo(j-1, c%res_xy) + 1
+          do i = la(1), lb(1)
+			  x = modulo(i-1, c%res_xy) + 1
              !! Manual reallocation of the data array if the array is full.
              !!
              if(c % grid(x,y,z) % nParts == c % grid(x,y,z) % lsize) then
@@ -246,14 +249,13 @@ contains
                 deallocate(tmp)
                 c % grid(x,y,z) % lsize = c % grid(x,y,z) % lsize + pmin
              end if
-
              !! Add the sphere index to the array.
              !!
+
              c % grid(x,y,z) % plist(c % grid(x,y,z) % nParts + 1) = si
              c % grid(x,y,z) % nParts = c % grid(x,y,z) % nParts + 1
 
              if(z > c % maxHeight_l(x,y)) c % maxHeight_l(x,y) = z
-
              tmp => null()
           end do
        end do
@@ -281,7 +283,7 @@ contains
     logical, optional :: verbose
 
     real(FD) :: minX, maxX, minY, maxY, pp(3)
-    integer :: i, x, y, z, la(3), lb(3)
+    integer :: i, x, y, z, la(3), lb(3), perBin
 
     logical v
 
@@ -324,8 +326,8 @@ contains
        la(1:2) = floor((pp(1:2) - c%parts(i)%r + c%hwidth) * c%rw) + 1
        lb(1:2) = floor((pp(1:2) + c%parts(i)%r + c%hwidth) * c%rw) + 1
 
-       where(la < 1)        la = 1
-       where(lb > c%res_xy) lb = c%res_xy
+!       where(la < 1)        la = 1
+!       where(lb > c%res_xy) lb = c%res_xy
 
        la(3) = floor((pp(3) - c%parts(i) % r) * c % rh) + 1
        lb(3) = floor((pp(3) + c%parts(i) % r) * c % rh) + 1
@@ -355,7 +357,7 @@ contains
 
     real(FD) :: height
 
-    integer :: gx, gy, gz, iPart, nDown, np, k
+    integer :: gx, gy, gz, iPart, nDown, np, k, x,y
 
     integer, dimension(:), pointer :: pList 
 
@@ -364,6 +366,8 @@ contains
     real(FD) :: l  !! Squared distance of the sphere centers in (x,y)-plane.
     real(FD) :: d  !! Squared sum of the sphere radii.
     real(FD) :: h  !! Height of the new sphere center.
+	
+	integer :: maxh, th
 
     logical  :: iFound
  
@@ -375,11 +379,21 @@ contains
     ! the xy-projection of the sphere searching for the resting
     ! height.
     !
+	maxh = 0
+    do y = lim2D_a(2, iDrop), lim2D_b(2, iDrop)
+		gy = modulo(y-1, c%res_xy) + 1
+       	do x = lim2D_a(1, iDrop), lim2D_b(1, iDrop)
+       		gx = modulo(x-1, c%res_xy) + 1
+			th = c % maxHeight_l(gx, gy)
+			if (th > maxh) maxh = th
+		end do
+	end do
 
-    do gz = maxval(c % maxHeight_l(lim2D_a(1, iDrop):lim2D_b(1, iDrop), lim2D_a(2, iDrop):lim2D_b(2, iDrop))),1,-1
-          do gy = lim2D_a(2, iDrop), lim2D_b(2, iDrop)
-             do gx = lim2D_a(1, iDrop), lim2D_b(1, iDrop)
-             
+    do gz = maxh,1,-1
+          do y = lim2D_a(2, iDrop), lim2D_b(2, iDrop)
+			 gy = modulo(y-1, c%res_xy) + 1
+             do x = lim2D_a(1, iDrop), lim2D_b(1, iDrop)
+             	gx = modulo(x-1, c%res_xy) + 1
                 pList => c % grid(gx,gy,gz) % plist
                 np = c % grid(gx,gy,gz) % nParts
 
@@ -459,20 +473,21 @@ contains
  
     type(prt_sphere), pointer       :: cPa, oPa
 
+
     cPa => c%parts(sI)
 
     !$omp parallel
     !$omp single
 
-    call rnd_generate_uniform(-c%hWidth+cPa%r, c%hWidth-cPa%r, p(1,:))
-    call rnd_generate_uniform(-c%hWidth+cPa%r, c%hWidth-cPa%r, p(2,:))
+    call rnd_generate_uniform(-c%hWidth, c%hWidth, p(1,:))
+    call rnd_generate_uniform(-c%hWidth, c%hWidth, p(2,:))
       
     lim2D_a = floor((p - cPa%r + c%hwidth) * c%rw) + 1
     lim2D_b = floor((p + cPa%r + c%hwidth) * c%rw) + 1
 
 
-    where(lim2D_a < 1)        lim2D_a = 1
-    where(lim2D_b > c%res_xy) lim2D_b = c%res_xy
+    !where(lim2D_a < 1)        lim2D_a = 1
+    !where(lim2D_b > c%res_xy) lim2D_b = c%res_xy
 
     height = 0.0
 
@@ -488,6 +503,7 @@ contains
     iMinHeight = minloc(height)
     !$omp end workshare
 
+
     !$omp sections
     cPa%P(1:2)   = p(:,iMinHeight(1))
     cPa%P(3)     = height(iMinHeight(1))
@@ -502,6 +518,7 @@ contains
     end if
     !$omp end single
 
+
     !$omp  sections
     lim3D_a(3) = floor((cPa%P(3) - cPa % r) * c % rh) + 1
     !$omp section
@@ -511,7 +528,6 @@ contains
     !$omp single
     if(lim3D_a(3) < 1) lim3D_a(3) = 1
     if(lim3D_a(3) > c%res_z) lim3D_a(3) = c%res_z
-
     if(lim3D_b(3) > c%res_z) lim3D_b(3) = c%res_z
 
     call cnt_grid3D_addParticleToCells(c, sI, lim3D_a, lim3D_b)
@@ -791,6 +807,9 @@ contains
     pos_g(1)   = floor((pos_r(1) + c%hwidth) * c%rw) + 1
     pos_g(2)   = floor((pos_r(2) + c%hwidth) * c%rw) + 1
     pos_g(3)   = floor((pos_r(3) ) * c%rh) + 1
+	pos_g(1) = max(min(pos_g(1), c%res_xy), 1)
+	pos_g(2) = max(min(pos_g(2), c%res_xy), 1)
+	pos_g(3) = max(min(pos_g(3), c%res_z), 1)
 
   end function cnt_grid3D_quantizePosition
   !******

@@ -21,7 +21,7 @@ program xrfpmhs
   use random
   use medium
   use rfield
-  use trace
+  use trace_xr
   use sampler
 
 
