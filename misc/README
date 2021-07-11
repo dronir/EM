@@ -1,0 +1,4 @@
+Build:
+docker build -t xrfpm_image .
+Run:
+docker run -it --memory=4g -v $(pwd)/shared:/shared xrfpm_image /bin/bash
